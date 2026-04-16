@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "*.conf.tpl": "nginx",
+        "*.service.tpl": "ini",
+        "*.inc.php.tpl": "php"
+    },
+    "files.eol": "\n",
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+}
