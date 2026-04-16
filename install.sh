@@ -37,9 +37,13 @@ unset _mod
 
 # --- Main ---
 main() {
+    # Mirror all output to log file from this point on
+    exec > >(tee -a "$LOG_FILE") 2>&1
+
     echo ""
     echo "  ${INSTALLER_NAME} v${INSTALLER_VERSION}"
     echo ""
+
     # TODO: preflight, input, module dispatch
 }
 
