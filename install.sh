@@ -44,7 +44,31 @@ main() {
     echo "  ${INSTALLER_NAME} v${INSTALLER_VERSION}"
     echo ""
 
-    # TODO: preflight, input, module dispatch
+    preflight_checks
+    collect_user_input
+    init_credentials_file
+
+    # --- Module installation ---
+    run_module "base"
+    run_module "nginx"
+    run_module "firewall"
+    run_module "mariadb"
+    run_module "php"
+    run_module "redis"
+    run_module "composer"
+    run_module "nodejs"
+    run_module "certbot"
+    run_module "phpmyadmin"
+    run_module "filebrowser"
+    run_module "fail2ban"
+    run_module "unattended_upgrades"
+    run_module "swap"
+    run_module "domains"
+    run_module "databases"
+
+    # --- Post-install ---
+    write_main_credentials
+    # TODO: print_summary
 }
 
 main "$@"
