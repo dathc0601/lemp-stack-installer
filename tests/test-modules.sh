@@ -47,9 +47,9 @@ for mod_file in "${SCRIPT_DIR}"/modules/*.sh; do
 
     if $ok; then
         echo "PASS: ${basename_no_ext}"
-        ((passed++))
+        passed=$((passed + 1))
     else
-        ((failed++))
+        failed=$((failed + 1))
     fi
 done
 
