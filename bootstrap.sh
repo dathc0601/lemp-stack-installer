@@ -36,4 +36,6 @@ ln -sf "${INSTALL_DIR}/manage.sh" /usr/local/bin/lemp-manage
 
 # --- Hand off to installer --------------------------------------------------
 chmod +x "${INSTALL_DIR}/install.sh"
-exec "${INSTALL_DIR}/install.sh" "$@"
+# Reopen stdin from the terminal — when invoked via `curl | bash`, stdin is the
+# pipe (already consumed), so interactive prompts (read) would get EOF.
+exec "${INSTALL_DIR}/install.sh" "$@" < /dev/tty
