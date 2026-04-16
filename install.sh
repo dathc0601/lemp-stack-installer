@@ -68,7 +68,52 @@ main() {
 
     # --- Post-install ---
     write_main_credentials
-    # TODO: print_summary
+    print_summary
+}
+
+# =============================================================================
+#  SUMMARY  (lives in install.sh — references all globals, not tied to a module)
+# =============================================================================
+print_summary() {
+    section "INSTALLATION COMPLETE"
+
+    # Helpers — safe against grep returning no matches under set -e + pipefail
+    safe_version() { "$@" 2>&1 | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "unknown"; }
+
+    echo ""
+    echo "Installed versions:"
+    echo "  Nginx       : $(nginx -v 2>&1 | cut -d'/' -f2 || echo unknown)"
+    echo "  MariaDB     : $(safe_version mariadb --version)"
+    echo "  PHP         : $(safe_version php -v)"
+    echo "  Composer    : $(safe_version composer --version)"
+    echo "  Node.js     : $(node -v 2>/dev/null || echo unknown)"
+    echo "  Redis       : $(redis-server --version 2>/dev/null | awk '{print $3}' | cut -d= -f2 || echo unknown)"
+    echo "  Certbot     : $(safe_version certbot --version)"
+    echo ""
+    echo "Domains configured:"
+    for d in "${DOMAINS[@]}"; do
+        echo "  • ${d} → ${WEB_ROOT_BASE}/${d}"
+    done
+    echo ""
+    echo -e "${C_YLW}┌─────────────────────────────────────────────────────────┐${C_RST}"
+    echo -e "${C_YLW}│  All credentials saved to: ${CREDENTIALS_FILE}${C_RST}"
+    echo -e "${C_YLW}│  View with:  sudo cat ${CREDENTIALS_FILE}${C_RST}"
+    echo -e "${C_YLW}└─────────────────────────────────────────────────────────┘${C_RST}"
+    echo ""
+    echo "Security notes:"
+    echo "  • phpMyAdmin and File Browser use randomized URL paths (in credentials file)"
+    echo "  • Default catch-all returns 444 — admin tools only accessible via your domains"
+    echo "  • UFW enabled — only SSH(${SSH_PORT}), 80, 443 are open"
+    echo ""
+    echo "Next step — issue SSL certificates:"
+    local certbot_args=""
+    for d in "${DOMAINS[@]}"; do
+        certbot_args+=" -d ${d} -d www.${d}"
+    done
+    echo "  sudo certbot --nginx${certbot_args}"
+    echo ""
+    echo "Auto-renewal is handled by certbot.timer (already enabled)."
+    echo ""
 }
 
 main "$@"
