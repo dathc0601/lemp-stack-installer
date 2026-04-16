@@ -61,21 +61,10 @@ _phpmyadmin_configure() {
     chmod -R 755 "$PMA_DIR"
     chmod 770 "${PMA_DIR}/tmp"
 
-    cat > "${PMA_DIR}/config.inc.php" <<PMAEOF
-<?php
-\$cfg['blowfish_secret'] = '${PMA_BLOWFISH}';
-\$i = 0;
-\$i++;
-\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
-\$cfg['Servers'][\$i]['host'] = 'localhost';
-\$cfg['Servers'][\$i]['compress'] = false;
-\$cfg['Servers'][\$i]['AllowNoPassword'] = false;
-\$cfg['UploadDir'] = '';
-\$cfg['SaveDir'] = '';
-\$cfg['TempDir'] = '${PMA_DIR}/tmp';
-\$cfg['MaxRows'] = 100;
-\$cfg['SendErrorReports'] = 'never';
-PMAEOF
+    render_template "phpmyadmin-config.inc.php.tpl" \
+        "PMA_BLOWFISH" "$PMA_BLOWFISH" \
+        "PMA_DIR" "$PMA_DIR" \
+        > "${PMA_DIR}/config.inc.php"
     chown "${NGINX_USER}:${NGINX_USER}" "${PMA_DIR}/config.inc.php"
     chmod 640 "${PMA_DIR}/config.inc.php"
 }

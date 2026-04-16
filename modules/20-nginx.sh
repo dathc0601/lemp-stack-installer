@@ -80,27 +80,14 @@ _nginx_configure_globals() {
     section "Configuring Nginx security headers & rate limits"
 
     # Rate-limit zones (must be in http context — conf.d files are included there)
-    cat > "${NGINX_CONF_DIR}/00-rate-limits.conf" <<'EOF'
-# Rate limiting zones — applied selectively to login/admin endpoints
-limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
-limit_req_zone $binary_remote_addr zone=admin:10m rate=30r/m;
-limit_req_status 429;
-EOF
+    # Static template — no placeholders
+    render_template "nginx-rate-limits.conf" \
+        > "${NGINX_CONF_DIR}/00-rate-limits.conf"
 
     # Security headers snippet — included in every server block
-    cat > "${NGINX_SNIPPETS_DIR}/security-headers.conf" <<'EOF'
-# Security headers (apply to all responses, including errors)
-add_header X-Frame-Options              "SAMEORIGIN"                       always;
-add_header X-Content-Type-Options       "nosniff"                          always;
-add_header Referrer-Policy              "strict-origin-when-cross-origin"  always;
-add_header X-XSS-Protection             "1; mode=block"                    always;
-add_header Permissions-Policy           "geolocation=(), microphone=(), camera=()" always;
-# HSTS — browsers ignore this on HTTP, so it's safe to set unconditionally
-add_header Strict-Transport-Security    "max-age=31536000; includeSubDomains" always;
-
-# Hide nginx version
-server_tokens off;
-EOF
+    # Static template — no placeholders
+    render_template "nginx-security-headers.conf" \
+        > "${NGINX_SNIPPETS_DIR}/security-headers.conf"
 
     log "Global Nginx config written."
 }

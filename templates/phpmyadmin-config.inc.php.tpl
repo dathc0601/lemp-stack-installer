@@ -1,7 +1,13 @@
 <?php
-// Template: phpMyAdmin configuration
-// Placeholders: {{PMA_BLOWFISH}}, {{PMA_DIR}}
-// Rendered by: render_template() in lib/utils.sh
-//
-// Will be populated during module migration with blowfish secret,
-// cookie auth config, and temp directory settings
+$cfg['blowfish_secret'] = '{{PMA_BLOWFISH}}';
+$i = 0;
+$i++;
+$cfg['Servers'][$i]['auth_type'] = 'cookie';
+$cfg['Servers'][$i]['host'] = 'localhost';
+$cfg['Servers'][$i]['compress'] = false;
+$cfg['Servers'][$i]['AllowNoPassword'] = false;
+$cfg['UploadDir'] = '';
+$cfg['SaveDir'] = '';
+$cfg['TempDir'] = '{{PMA_DIR}}/tmp';
+$cfg['MaxRows'] = 100;
+$cfg['SendErrorReports'] = 'never';
