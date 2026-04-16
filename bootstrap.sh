@@ -1,7 +1,7 @@
 #!/bin/bash
 ###############################################################################
 #  LEMP Stack Installer — Bootstrap (Remote Installer)
-#  Usage: curl -fsSL https://raw.githubusercontent.com/<repo>/main/bootstrap.sh | sudo bash
+#  Usage: curl -fsSL https://raw.githubusercontent.com/dathc0601/lemp-stack-installer/main/server-setup/bootstrap.sh | sudo bash
 #
 #  Clones (or updates) the repo to /opt/server-setup, creates the
 #  lemp-manage symlink, and hands off to install.sh.
@@ -11,7 +11,7 @@
 set -Eeuo pipefail
 
 INSTALL_DIR="/opt/server-setup"
-REPO_URL="https://github.com/<repo>/server-setup.git"  # TODO: update with real repo URL
+REPO_URL="https://github.com/dathc0601/lemp-stack-installer.git"
 BRANCH="main"
 
 # --- Ensure git is available ------------------------------------------------

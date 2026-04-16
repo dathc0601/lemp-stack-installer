@@ -23,8 +23,8 @@ module_nginx_install() {
     section "Installing Nginx"
     _nginx_install_packages
     _nginx_detect_user
-    _nginx_configure_globals
     mkdir -p "$NGINX_SNIPPETS_DIR"
+    _nginx_configure_globals
     systemctl enable --now nginx
     log "Nginx ready (running as user: $NGINX_USER)"
     state_mark_installed "nginx"

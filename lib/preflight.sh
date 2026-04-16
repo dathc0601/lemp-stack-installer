@@ -34,6 +34,12 @@ preflight_checks() {
             ;;
     esac
 
+    # Ensure openssl is available (needed for password generation in prompts)
+    if ! command_exists openssl; then
+        info "Installing openssl (required for password generation)..."
+        apt-get update -y -qq && apt-get install -y -qq openssl
+    fi
+
     # Detect SSH port (so we don't lock the user out via UFW)
     detect_ssh_port
 
