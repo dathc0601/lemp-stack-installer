@@ -110,6 +110,15 @@ _usage() {
 # Root check
 [[ $EUID -eq 0 ]] || err "lemp-manage must be run as root (use sudo)."
 
+# No args → launch the interactive menu (`lemp` entry point).
+# With args → fall through to the dispatcher below.
+if [[ $# -eq 0 ]]; then
+    # shellcheck source=/dev/null
+    source "${SCRIPT_DIR}/manage/_menu.sh"
+    show_menu
+    exit 0
+fi
+
 # Command argument
 CMD="${1:-}"
 if [[ -z "$CMD" ]]; then

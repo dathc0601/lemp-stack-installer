@@ -45,17 +45,52 @@ sudo certbot --nginx -d example.com -d www.example.com
 
 ## Day-2 Management
 
-The installer creates a `lemp-manage` command for ongoing server management:
+The installer creates two commands for ongoing server management:
+
+### `lemp` — interactive menu (recommended)
+
+Just type `lemp` and pick from a numbered menu — no commands to memorize:
 
 ```bash
-lemp-manage status                              # Service status, disk, memory, SSL expiry
-lemp-manage list-sites                           # List all configured domains
-lemp-manage add-domain example.com               # Add a domain (vhost + database)
-lemp-manage remove-domain example.com            # Remove a domain
-lemp-manage backup                               # Backup all domains
-lemp-manage backup example.com                   # Backup a single domain
-lemp-manage restore /var/backups/server-setup/2025-01-15/example.com example.com
-lemp-manage wp-install example.com               # Install WordPress on a domain
+sudo lemp
+```
+
+```
+═══════════════════════════════════════════════════════════
+             LEMP Stack Manager v2.1.0-dev
+                Ubuntu 24.04
+───────────────────────────────────────────────────────────
+Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
+───────────────────────────────────────────────────────────
+
+  1) Server status             (services, disk, memory, SSL)
+  2) List sites                (configured domains + SSL)
+  3) Add domain                (vhost + database)
+  4) Remove domain
+  5) Backup                    (all domains or one)
+  6) Restore                   (from backup path)
+  7) Install WordPress         (on a domain)
+
+  0) Exit
+
+─// Enter your choice (0-7) [Ctrl+C=Exit]:
+```
+
+The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the menu after each action.
+
+### `lemp-manage` — CLI (for scripting / automation)
+
+Same functionality, non-interactive:
+
+```bash
+sudo lemp-manage status                              # Service status, disk, memory, SSL expiry
+sudo lemp-manage list-sites                          # List all configured domains
+sudo lemp-manage add-domain example.com              # Add a domain (vhost + database)
+sudo lemp-manage remove-domain example.com           # Remove a domain
+sudo lemp-manage backup                              # Backup all domains
+sudo lemp-manage backup example.com                  # Backup a single domain
+sudo lemp-manage restore /var/backups/server-setup/2025-01-15/example.com example.com
+sudo lemp-manage wp-install example.com              # Install WordPress on a domain
 ```
 
 ## Security
@@ -103,6 +138,7 @@ server-setup/
 │   ├── 95-domains.sh          # Nginx vhosts
 │   └── 99-databases.sh        # Per-domain databases
 ├── manage/
+│   ├── _menu.sh              # Interactive TUI shown by `lemp`
 │   ├── add-domain.sh
 │   ├── remove-domain.sh
 │   ├── list-sites.sh

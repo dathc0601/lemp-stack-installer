@@ -31,7 +31,10 @@ else
     git clone --branch "$BRANCH" --depth 1 "$REPO_URL" "$INSTALL_DIR"
 fi
 
-# --- Create lemp-manage symlink ---------------------------------------------
+# --- Create lemp + lemp-manage symlinks -------------------------------------
+# `lemp` (no args) → interactive menu.  `lemp-manage <cmd> [args]` → CLI.
+# Both resolve to the same manage.sh; behavior is arg-based.
+ln -sf "${INSTALL_DIR}/manage.sh" /usr/local/bin/lemp
 ln -sf "${INSTALL_DIR}/manage.sh" /usr/local/bin/lemp-manage
 
 # --- Hand off to installer --------------------------------------------------
