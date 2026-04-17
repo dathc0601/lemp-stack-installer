@@ -91,6 +91,61 @@ _menu_pause() {
     read -rp "Press Enter to return to menu..." _unused || true
 }
 
+# Present a numbered picker of configured domains, filtered by SSL state.
+# Returns the selected domain name on stdout (nothing else — callers capture
+# via "$(_menu_pick_domain ssl-off)"). The list, prompts, and warnings all
+# go to stderr so they don't leak into the captured value.
+#   Usage: domain=$(_menu_pick_domain <filter>) || return 0
+#   Filters: all | ssl-on | ssl-off
+_menu_pick_domain() {
+    local filter="${1:-all}"
+    local domains=() conf name has_ssl
+    for conf in "${NGINX_CONF_DIR}"/*.conf; do
+        [[ -f "$conf" ]] || continue
+        name=$(basename "$conf" .conf)
+        [[ "$name" == "000-default" ]] && continue
+        has_ssl=0
+        [[ -f "/etc/letsencrypt/live/${name}/fullchain.pem" ]] && has_ssl=1
+        case "$filter" in
+            ssl-on)  [[ $has_ssl -eq 1 ]] || continue ;;
+            ssl-off) [[ $has_ssl -eq 0 ]] || continue ;;
+        esac
+        domains+=("$name")
+    done
+
+    if [[ ${#domains[@]} -eq 0 ]]; then
+        case "$filter" in
+            ssl-on)  warn "No domains have SSL certificates." >&2 ;;
+            ssl-off) warn "All configured domains already have SSL." >&2 ;;
+            *)       warn "No domains configured." >&2 ;;
+        esac
+        return 1
+    fi
+
+    {
+        echo ""
+        local i=1 d
+        for d in "${domains[@]}"; do
+            printf "  %d) %s\n" "$i" "$d"
+            i=$((i + 1))
+        done
+        echo ""
+    } >&2
+
+    local reply
+    if ! read -rp "─// Select a domain (1-${#domains[@]}) [0=Cancel]: " reply; then
+        echo "" >&2
+        return 1
+    fi
+
+    [[ "$reply" == "0" ]] && return 1
+    [[ "$reply" =~ ^[0-9]+$ ]] || { warn "Invalid selection: ${reply}" >&2; return 1; }
+    [[ "$reply" -ge 1 && "$reply" -le ${#domains[@]} ]] \
+        || { warn "Out of range: ${reply}" >&2; return 1; }
+
+    echo "${domains[$((reply - 1))]}"
+}
+
 # =============================================================================
 #  GENERIC MENU LOOP
 # =============================================================================
@@ -140,7 +195,8 @@ _menu_loop() {
 
 _menu_main_options() {
     echo "  1) Manage sites              (domains, backups, WordPress)"
-    echo "  2) Server status             (services, disk, memory, SSL)"
+    echo "  2) Manage SSL                (issue, renew, remove certificates)"
+    echo "  3) Server status             (services, disk, memory, SSL)"
     echo ""
     echo "  0) Exit"
     echo ""
@@ -154,6 +210,10 @@ _menu_main_dispatch() {
             return 2  # sub-menu already drew its own frame; skip pause
             ;;
         2)
+            show_ssl_menu
+            return 2
+            ;;
+        3)
             ( cmd_status ) || true
             ;;
         0|q|Q|exit|quit)
@@ -235,6 +295,56 @@ _menu_sites_dispatch() {
 }
 
 # =============================================================================
+#  SSL SUB-MENU
+# =============================================================================
+
+_menu_ssl_options() {
+    echo "  1) List SSL certificates     (domains with/without SSL, expiry)"
+    echo "  2) Issue SSL                 (Let's Encrypt via certbot)"
+    echo "  3) Remove SSL                (delete certificate)"
+    echo "  4) Renew SSL                 (force renewal for one, or check all)"
+    echo ""
+    echo "  0) Back to main menu"
+    echo ""
+}
+
+_menu_ssl_dispatch() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            ( cmd_ssl_list ) || true
+            ;;
+        2)
+            # Only show domains that don't yet have SSL
+            local domain
+            domain=$(_menu_pick_domain "ssl-off") || return 0
+            ( cmd_ssl_issue "$domain" ) || true
+            ;;
+        3)
+            # Only show domains that do have SSL
+            local domain
+            domain=$(_menu_pick_domain "ssl-on") || return 0
+            ( cmd_ssl_remove "$domain" ) || true
+            ;;
+        4)
+            # Renew a specific cert — pick from those with SSL
+            local domain
+            domain=$(_menu_pick_domain "ssl-on") || return 0
+            ( cmd_ssl_renew "$domain" ) || true
+            ;;
+        0|b|B|back)
+            return 1
+            ;;
+        "")
+            ;;
+        *)
+            warn "Invalid choice: ${choice}"
+            ;;
+    esac
+    return 0
+}
+
+# =============================================================================
 #  ENTRY POINTS
 # =============================================================================
 
@@ -254,7 +364,7 @@ _menu_load_commands() {
 show_menu() {
     _menu_load_commands
     _menu_loop "" _menu_main_options _menu_main_dispatch \
-        "─// Enter your choice (0-2) [Ctrl+C=Exit]: "
+        "─// Enter your choice (0-3) [Ctrl+C=Exit]: "
     echo ""
     info "Goodbye."
 }
@@ -264,4 +374,10 @@ show_menu() {
 show_sites_menu() {
     _menu_loop "1. Manage sites" _menu_sites_options _menu_sites_dispatch \
         "─// Enter your choice (0-6) [0=Back]: "
+}
+
+# SSL sub-menu — invoked from _menu_main_dispatch.
+show_ssl_menu() {
+    _menu_loop "2. Manage SSL" _menu_ssl_options _menu_ssl_dispatch \
+        "─// Enter your choice (0-4) [0=Back]: "
 }

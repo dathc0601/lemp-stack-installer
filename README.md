@@ -64,11 +64,12 @@ Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
 ───────────────────────────────────────────────────────────
 
   1) Manage sites              (domains, backups, WordPress)
-  2) Server status             (services, disk, memory, SSL)
+  2) Manage SSL                (issue, renew, remove certificates)
+  3) Server status             (services, disk, memory, SSL)
 
   0) Exit
 
-─// Enter your choice (0-2) [Ctrl+C=Exit]:
+─// Enter your choice (0-3) [Ctrl+C=Exit]:
 ```
 
 Picking **Manage sites** opens a sub-menu with all site/domain actions:
@@ -88,6 +89,21 @@ Picking **Manage sites** opens a sub-menu with all site/domain actions:
   0) Back to main menu
 ```
 
+Picking **Manage SSL** opens a sub-menu with Let's Encrypt actions. Each action that needs a domain shows a numbered picker filtered by SSL state — pick `2) Issue SSL` and you'll only see domains that don't yet have a certificate:
+
+```
+───────────────────────────────────────────────────────────
+  » 2. Manage SSL
+───────────────────────────────────────────────────────────
+
+  1) List SSL certificates     (domains with/without SSL, expiry)
+  2) Issue SSL                 (Let's Encrypt via certbot)
+  3) Remove SSL                (delete certificate)
+  4) Renew SSL                 (force renewal for one, or check all)
+
+  0) Back to main menu
+```
+
 The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the appropriate menu after each action.
 
 ### `lemp-manage` — CLI (for scripting / automation)
@@ -95,6 +111,7 @@ The menu prompts for any required arguments (domain name, backup path, etc.) and
 Same functionality, non-interactive:
 
 ```bash
+# Sites
 sudo lemp-manage status                              # Service status, disk, memory, SSL expiry
 sudo lemp-manage list-sites                          # List all configured domains
 sudo lemp-manage add-domain example.com              # Add a domain (vhost + database)
@@ -103,6 +120,13 @@ sudo lemp-manage backup                              # Backup all domains
 sudo lemp-manage backup example.com                  # Backup a single domain
 sudo lemp-manage restore /var/backups/server-setup/2025-01-15/example.com example.com
 sudo lemp-manage wp-install example.com              # Install WordPress on a domain
+
+# SSL (Let's Encrypt)
+sudo lemp-manage ssl-list                            # List certs + expiry for every domain
+sudo lemp-manage ssl-issue example.com               # Issue a cert (auto-includes www.example.com if in vhost)
+sudo lemp-manage ssl-remove example.com              # Delete cert; prompts to regenerate vhost
+sudo lemp-manage ssl-renew example.com               # Force-renew one cert
+sudo lemp-manage ssl-renew                           # Renew-check all certs (only near-expiry ones renew)
 ```
 
 ## Security
@@ -157,6 +181,10 @@ server-setup/
 │   ├── backup.sh
 │   ├── restore.sh
 │   ├── wp-install.sh
+│   ├── ssl-list.sh
+│   ├── ssl-issue.sh
+│   ├── ssl-remove.sh
+│   ├── ssl-renew.sh
 │   └── status.sh
 ├── templates/                 # Nginx/systemd/PHP configs with {{PLACEHOLDER}} markers
 └── tests/

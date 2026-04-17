@@ -97,7 +97,7 @@ _usage() {
     echo ""
     echo "  Usage: lemp-manage <command> [args]"
     echo ""
-    echo "  Commands:"
+    echo "  Sites:"
     echo "    status                       Show server status"
     echo "    list-sites                   List configured domains"
     echo "    add-domain <domain>          Add a new domain"
@@ -105,6 +105,12 @@ _usage() {
     echo "    backup [domain]              Backup web roots and databases"
     echo "    restore <path> <domain>      Restore from backup"
     echo "    wp-install <domain>          Install WordPress"
+    echo ""
+    echo "  SSL:"
+    echo "    ssl-list                     List SSL certificates + expiry"
+    echo "    ssl-issue <domain>           Issue Let's Encrypt cert"
+    echo "    ssl-remove <domain>          Delete Let's Encrypt cert"
+    echo "    ssl-renew [domain]           Renew a cert (or all if omitted)"
     echo ""
 }
 
