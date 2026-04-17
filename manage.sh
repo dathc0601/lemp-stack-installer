@@ -112,6 +112,12 @@ _usage() {
     echo "    ssl-remove <domain>          Delete Let's Encrypt cert"
     echo "    ssl-renew [domain]           Renew a cert (or all if omitted)"
     echo ""
+    echo "  SSH/SFTP:"
+    echo "    ssh-port [port]              Change SSH port (two-phase safety gate)"
+    echo "    ssh-root-password            Change root account password"
+    echo "    sftp-user-password [user]    Change a Linux user's password"
+    echo "    fail2ban-maxretry [N]        Set fail2ban [DEFAULT] maxretry (1-20)"
+    echo ""
 }
 
 # =============================================================================

@@ -65,11 +65,12 @@ Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
 
   1) Manage sites              (domains, backups, WordPress)
   2) Manage SSL                (issue, renew, remove certificates)
-  3) Server status             (services, disk, memory, SSL)
+  3) Manage SSH/SFTP           (port, passwords, fail2ban)
+  4) Server status             (services, disk, memory, SSL)
 
   0) Exit
 
-─// Enter your choice (0-3) [Ctrl+C=Exit]:
+─// Enter your choice (0-4) [Ctrl+C=Exit]:
 ```
 
 Picking **Manage sites** opens a sub-menu with all site/domain actions:
@@ -104,6 +105,21 @@ Picking **Manage SSL** opens a sub-menu with Let's Encrypt actions. Each action 
   0) Back to main menu
 ```
 
+Picking **Manage SSH/SFTP** opens a sub-menu for server access hardening. The SSH port change uses a two-phase safety gate: the new port is opened alongside the old one, and you're prompted to verify a test login from a separate terminal *before* the old port is closed — so a typo'd port or firewall misconfig won't lock you out.
+
+```
+───────────────────────────────────────────────────────────
+  » 3. Manage SSH/SFTP
+───────────────────────────────────────────────────────────
+
+  1) Change SSH port           (sshd drop-in + UFW + fail2ban)
+  2) Change root password      (root SSH/console login)
+  3) Change user password      (passwd for a Linux user)
+  4) fail2ban max retries      (failed logins before ban)
+
+  0) Back to main menu
+```
+
 The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the appropriate menu after each action.
 
 ### `lemp-manage` — CLI (for scripting / automation)
@@ -127,6 +143,13 @@ sudo lemp-manage ssl-issue example.com               # Issue a cert (auto-includ
 sudo lemp-manage ssl-remove example.com              # Delete cert; prompts to regenerate vhost
 sudo lemp-manage ssl-renew example.com               # Force-renew one cert
 sudo lemp-manage ssl-renew                           # Renew-check all certs (only near-expiry ones renew)
+
+# SSH / SFTP
+sudo lemp-manage ssh-port                            # Change SSH port (interactive, two-phase safety gate)
+sudo lemp-manage ssh-port 2222                       # Same, pre-seeded new port
+sudo lemp-manage ssh-root-password                   # Change the root password (silent prompt, min 12 chars)
+sudo lemp-manage sftp-user-password deploy           # Change an existing user's password
+sudo lemp-manage fail2ban-maxretry 3                 # Set fail2ban [DEFAULT] maxretry (1-20)
 ```
 
 ## Security
@@ -185,6 +208,10 @@ server-setup/
 │   ├── ssl-issue.sh
 │   ├── ssl-remove.sh
 │   ├── ssl-renew.sh
+│   ├── ssh-port.sh
+│   ├── ssh-root-password.sh
+│   ├── sftp-user-password.sh
+│   ├── fail2ban-maxretry.sh
 │   └── status.sh
 ├── templates/                 # Nginx/systemd/PHP configs with {{PLACEHOLDER}} markers
 └── tests/

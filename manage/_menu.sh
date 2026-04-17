@@ -146,6 +146,52 @@ _menu_pick_domain() {
     echo "${domains[$((reply - 1))]}"
 }
 
+# Present a numbered picker of real human Linux users (UID ≥ 1000, login shell,
+# excluding root). Returns the selected username on stdout (nothing else —
+# callers capture via "$(_menu_pick_user)"). Stderr carries the UI.
+#   Usage: user=$(_menu_pick_user) || return 0
+_menu_pick_user() {
+    local users=() name uid shell
+    while IFS=: read -r name _ uid _ _ _ shell; do
+        [[ "$uid" =~ ^[0-9]+$ ]] || continue
+        [[ "$uid" -ge 1000 && "$uid" -lt 65534 ]] || continue
+        [[ "$name" == "root" ]] && continue
+        case "$shell" in
+            /usr/sbin/nologin|/sbin/nologin|/bin/false|/usr/bin/false) continue ;;
+        esac
+        users+=("$name")
+    done < /etc/passwd
+
+    if [[ ${#users[@]} -eq 0 ]]; then
+        warn "No human users found (UID ≥ 1000 with a login shell)." >&2
+        warn "Create one first: sudo adduser <name>" >&2
+        return 1
+    fi
+
+    {
+        echo ""
+        local i=1 u
+        for u in "${users[@]}"; do
+            printf "  %d) %s\n" "$i" "$u"
+            i=$((i + 1))
+        done
+        echo ""
+    } >&2
+
+    local reply
+    if ! read -rp "─// Select a user (1-${#users[@]}) [0=Cancel]: " reply; then
+        echo "" >&2
+        return 1
+    fi
+
+    [[ "$reply" == "0" ]] && return 1
+    [[ "$reply" =~ ^[0-9]+$ ]] || { warn "Invalid selection: ${reply}" >&2; return 1; }
+    [[ "$reply" -ge 1 && "$reply" -le ${#users[@]} ]] \
+        || { warn "Out of range: ${reply}" >&2; return 1; }
+
+    echo "${users[$((reply - 1))]}"
+}
+
 # =============================================================================
 #  GENERIC MENU LOOP
 # =============================================================================
@@ -196,7 +242,8 @@ _menu_loop() {
 _menu_main_options() {
     echo "  1) Manage sites              (domains, backups, WordPress)"
     echo "  2) Manage SSL                (issue, renew, remove certificates)"
-    echo "  3) Server status             (services, disk, memory, SSL)"
+    echo "  3) Manage SSH/SFTP           (port, passwords, fail2ban)"
+    echo "  4) Server status             (services, disk, memory, SSL)"
     echo ""
     echo "  0) Exit"
     echo ""
@@ -214,6 +261,10 @@ _menu_main_dispatch() {
             return 2
             ;;
         3)
+            show_ssh_menu
+            return 2
+            ;;
+        4)
             ( cmd_status ) || true
             ;;
         0|q|Q|exit|quit)
@@ -345,6 +396,50 @@ _menu_ssl_dispatch() {
 }
 
 # =============================================================================
+#  SSH/SFTP SUB-MENU
+# =============================================================================
+
+_menu_ssh_options() {
+    echo "  1) Change SSH port           (sshd drop-in + UFW + fail2ban)"
+    echo "  2) Change root password      (root SSH/console login)"
+    echo "  3) Change user password      (passwd for a Linux user)"
+    echo "  4) fail2ban max retries      (failed logins before ban)"
+    echo ""
+    echo "  0) Back to main menu"
+    echo ""
+}
+
+_menu_ssh_dispatch() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            # cmd_ssh_port prompts interactively; no pre-selection needed.
+            ( cmd_ssh_port ) || true
+            ;;
+        2)
+            ( cmd_ssh_root_password ) || true
+            ;;
+        3)
+            local user
+            user=$(_menu_pick_user) || return 0
+            ( cmd_sftp_user_password "$user" ) || true
+            ;;
+        4)
+            ( cmd_fail2ban_maxretry ) || true
+            ;;
+        0|b|B|back)
+            return 1
+            ;;
+        "")
+            ;;
+        *)
+            warn "Invalid choice: ${choice}"
+            ;;
+    esac
+    return 0
+}
+
+# =============================================================================
 #  ENTRY POINTS
 # =============================================================================
 
@@ -364,7 +459,7 @@ _menu_load_commands() {
 show_menu() {
     _menu_load_commands
     _menu_loop "" _menu_main_options _menu_main_dispatch \
-        "─// Enter your choice (0-3) [Ctrl+C=Exit]: "
+        "─// Enter your choice (0-4) [Ctrl+C=Exit]: "
     echo ""
     info "Goodbye."
 }
@@ -379,5 +474,11 @@ show_sites_menu() {
 # SSL sub-menu — invoked from _menu_main_dispatch.
 show_ssl_menu() {
     _menu_loop "2. Manage SSL" _menu_ssl_options _menu_ssl_dispatch \
+        "─// Enter your choice (0-4) [0=Back]: "
+}
+
+# SSH/SFTP sub-menu — invoked from _menu_main_dispatch.
+show_ssh_menu() {
+    _menu_loop "3. Manage SSH/SFTP" _menu_ssh_options _menu_ssh_dispatch \
         "─// Enter your choice (0-4) [0=Back]: "
 }
