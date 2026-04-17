@@ -17,8 +17,13 @@
 
 set -Eeuo pipefail
 
-# Resolve the directory this script lives in (handles symlinks)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve the directory this script lives in, following symlinks.
+# Invoked via /usr/local/bin/lemp or /usr/local/bin/lemp-manage, both of
+# which symlink to /opt/server-setup/manage.sh — we need to follow the
+# symlink so relative paths (manage/*.sh, lib/*.sh) resolve under the
+# real install dir, not /usr/local/bin.
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 readonly SCRIPT_DIR
 
 # --- Source library files (alphabetical: core.sh loads first) ---
