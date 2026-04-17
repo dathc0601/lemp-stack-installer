@@ -63,20 +63,32 @@ sudo lemp
 Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
 ───────────────────────────────────────────────────────────
 
-  1) Server status             (services, disk, memory, SSL)
-  2) List sites                (configured domains + SSL)
-  3) Add domain                (vhost + database)
-  4) Remove domain
-  5) Backup                    (all domains or one)
-  6) Restore                   (from backup path)
-  7) Install WordPress         (on a domain)
+  1) Manage sites              (domains, backups, WordPress)
+  2) Server status             (services, disk, memory, SSL)
 
   0) Exit
 
-─// Enter your choice (0-7) [Ctrl+C=Exit]:
+─// Enter your choice (0-2) [Ctrl+C=Exit]:
 ```
 
-The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the menu after each action.
+Picking **Manage sites** opens a sub-menu with all site/domain actions:
+
+```
+───────────────────────────────────────────────────────────
+  » 1. Manage sites
+───────────────────────────────────────────────────────────
+
+  1) List sites                (configured domains + SSL)
+  2) Add domain                (vhost + database)
+  3) Remove domain
+  4) Backup                    (all domains or one)
+  5) Restore                   (from backup path)
+  6) Install WordPress         (on a domain)
+
+  0) Back to main menu
+```
+
+The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the appropriate menu after each action.
 
 ### `lemp-manage` — CLI (for scripting / automation)
 
