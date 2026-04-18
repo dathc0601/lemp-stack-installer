@@ -25,7 +25,7 @@ module_base_install() {
     apt_upgrade
     apt_install \
         software-properties-common apt-transport-https ca-certificates \
-        curl wget gnupg lsb-release unzip git ufw openssl
+        curl wget gnupg lsb-release unzip git ufw openssl apache2-utils
     log "Base packages installed."
     state_mark_installed "base"
 }

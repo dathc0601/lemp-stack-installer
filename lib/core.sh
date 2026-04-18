@@ -40,6 +40,7 @@ readonly FB_DATA_DIR="/var/lib/filebrowser"
 
 # phpMyAdmin
 readonly PMA_DIR="/usr/share/phpmyadmin"
+readonly PMA_HTPASSWD_FILE="/etc/nginx/.htpasswd-pma"
 
 # Colors
 readonly C_RED='\033[0;31m'
@@ -57,6 +58,8 @@ DOMAINS=()
 PMA_PATH=""           # e.g. "/pma-a3f2b1c4"  (randomized)
 FB_PATH=""            # e.g. "/files-d9e8f7g6" (randomized)
 PMA_BLOWFISH=""
+PMA_AUTH_USER=""      # HTTP basic-auth user wrapping phpMyAdmin (defaults to "admin")
+PMA_AUTH_PASS=""      # HTTP basic-auth password (24-char random at install time)
 NGINX_USER=""         # auto-detected: "nginx" (nginx.org) or "www-data" (distro)
 SSH_PORT=""           # auto-detected from sshd
 OS_CODENAME=""        # jammy / noble

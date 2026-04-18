@@ -192,6 +192,97 @@ _menu_pick_user() {
     echo "${users[$((reply - 1))]}"
 }
 
+# Present a 2-option picker for the admin app the op applies to. Returns "pma"
+# or "fb" on stdout; UI and warnings to stderr. Matches the stderr-for-UI /
+# stdout-for-value contract of _menu_pick_domain.
+#   Usage: app=$(_menu_pick_admin_app) || return 0
+_menu_pick_admin_app() {
+    {
+        echo ""
+        echo "  1) phpMyAdmin    (HTTP basic auth / ${PMA_HTPASSWD_FILE})"
+        echo "  2) File Browser  (native user DB)"
+        echo ""
+    } >&2
+    local reply
+    if ! read -rp "─// Select app (1-2) [0=Cancel]: " reply; then
+        echo "" >&2; return 1
+    fi
+    case "$reply" in
+        1) echo "pma" ;;
+        2) echo "fb"  ;;
+        0) return 1 ;;
+        *) warn "Invalid selection: ${reply}" >&2; return 1 ;;
+    esac
+}
+
+# Picker for existing phpMyAdmin basic-auth users. Reads /etc/nginx/.htpasswd-pma.
+_menu_pick_pma_user() {
+    if [[ ! -f "$PMA_HTPASSWD_FILE" ]]; then
+        warn "No phpMyAdmin admin users yet." >&2
+        warn "Add one first: lemp-manage appadmin-add pma <user>" >&2
+        return 1
+    fi
+    local users=() name
+    while IFS=: read -r name _; do
+        [[ -n "$name" ]] && users+=("$name")
+    done < "$PMA_HTPASSWD_FILE"
+    if [[ ${#users[@]} -eq 0 ]]; then
+        warn "${PMA_HTPASSWD_FILE} exists but is empty." >&2
+        return 1
+    fi
+    {
+        echo ""
+        local i=1 u
+        for u in "${users[@]}"; do printf "  %d) %s\n" "$i" "$u"; i=$((i + 1)); done
+        echo ""
+    } >&2
+    local reply
+    if ! read -rp "─// Select phpMyAdmin user (1-${#users[@]}) [0=Cancel]: " reply; then
+        echo "" >&2; return 1
+    fi
+    [[ "$reply" == "0" ]] && return 1
+    [[ "$reply" =~ ^[0-9]+$ ]] || { warn "Invalid selection: ${reply}" >&2; return 1; }
+    [[ "$reply" -ge 1 && "$reply" -le ${#users[@]} ]] \
+        || { warn "Out of range: ${reply}" >&2; return 1; }
+    echo "${users[$((reply - 1))]}"
+}
+
+# Picker for existing File Browser users. Parses `filebrowser users ls`.
+_menu_pick_fb_user() {
+    if ! command_exists filebrowser; then
+        warn "filebrowser CLI not installed." >&2
+        return 1
+    fi
+    local db="${FB_DATA_DIR}/filebrowser.db"
+    if [[ ! -f "$db" ]]; then
+        warn "File Browser database not found: ${db}" >&2
+        return 1
+    fi
+    local users=() name
+    while IFS= read -r name; do
+        [[ -n "$name" ]] && users+=("$name")
+    done < <(filebrowser users ls -d "$db" 2>/dev/null | awk 'NR > 1 {print $1}' || true)
+    if [[ ${#users[@]} -eq 0 ]]; then
+        warn "No File Browser users found." >&2
+        return 1
+    fi
+    {
+        echo ""
+        local i=1 u
+        for u in "${users[@]}"; do printf "  %d) %s\n" "$i" "$u"; i=$((i + 1)); done
+        echo ""
+    } >&2
+    local reply
+    if ! read -rp "─// Select File Browser user (1-${#users[@]}) [0=Cancel]: " reply; then
+        echo "" >&2; return 1
+    fi
+    [[ "$reply" == "0" ]] && return 1
+    [[ "$reply" =~ ^[0-9]+$ ]] || { warn "Invalid selection: ${reply}" >&2; return 1; }
+    [[ "$reply" -ge 1 && "$reply" -le ${#users[@]} ]] \
+        || { warn "Out of range: ${reply}" >&2; return 1; }
+    echo "${users[$((reply - 1))]}"
+}
+
 # =============================================================================
 #  GENERIC MENU LOOP
 # =============================================================================
@@ -243,7 +334,8 @@ _menu_main_options() {
     echo "  1) Manage sites              (domains, backups, WordPress)"
     echo "  2) Manage SSL                (issue, renew, remove certificates)"
     echo "  3) Manage SSH/SFTP           (port, passwords, fail2ban)"
-    echo "  4) Server status             (services, disk, memory, SSL)"
+    echo "  4) Manage admin apps         (users, paths, auth retries)"
+    echo "  5) Server status             (services, disk, memory, SSL)"
     echo ""
     echo "  0) Exit"
     echo ""
@@ -265,6 +357,10 @@ _menu_main_dispatch() {
             return 2
             ;;
         4)
+            show_appadmin_menu
+            return 2
+            ;;
+        5)
             ( cmd_status ) || true
             ;;
         0|q|Q|exit|quit)
@@ -440,6 +536,57 @@ _menu_ssh_dispatch() {
 }
 
 # =============================================================================
+#  ADMIN APPS SUB-MENU
+# =============================================================================
+
+_menu_appadmin_options() {
+    echo "  1) Change admin paths        (rotate /pma-<hex> and /files-<hex>)"
+    echo "  2) List admin users          (phpMyAdmin + File Browser)"
+    echo "  3) Add admin user            (pick app, username, password)"
+    echo "  4) Change admin password     (pick app, user, new password)"
+    echo "  5) Delete admin user         (pick app, user)"
+    echo "  6) Auth login retries        (fail2ban [nginx-http-auth] maxretry)"
+    echo ""
+    echo "  0) Back to main menu"
+    echo ""
+}
+
+_menu_appadmin_dispatch() {
+    local choice="$1"
+    case "$choice" in
+        1)
+            ( cmd_appadmin_paths ) || true
+            ;;
+        2)
+            ( cmd_appadmin_list ) || true
+            ;;
+        3)
+            # App + username + password are collected inside the command itself
+            # (it calls _menu_pick_admin_app when app arg is missing).
+            ( cmd_appadmin_add ) || true
+            ;;
+        4)
+            ( cmd_appadmin_password ) || true
+            ;;
+        5)
+            ( cmd_appadmin_remove ) || true
+            ;;
+        6)
+            ( cmd_appadmin_maxretry ) || true
+            ;;
+        0|b|B|back)
+            return 1
+            ;;
+        "")
+            ;;
+        *)
+            warn "Invalid choice: ${choice}"
+            ;;
+    esac
+    return 0
+}
+
+# =============================================================================
 #  ENTRY POINTS
 # =============================================================================
 
@@ -459,7 +606,7 @@ _menu_load_commands() {
 show_menu() {
     _menu_load_commands
     _menu_loop "" _menu_main_options _menu_main_dispatch \
-        "─// Enter your choice (0-4) [Ctrl+C=Exit]: "
+        "─// Enter your choice (0-5) [Ctrl+C=Exit]: "
     echo ""
     info "Goodbye."
 }
@@ -481,4 +628,10 @@ show_ssl_menu() {
 show_ssh_menu() {
     _menu_loop "3. Manage SSH/SFTP" _menu_ssh_options _menu_ssh_dispatch \
         "─// Enter your choice (0-4) [0=Back]: "
+}
+
+# Admin apps sub-menu — invoked from _menu_main_dispatch.
+show_appadmin_menu() {
+    _menu_loop "4. Manage admin apps" _menu_appadmin_options _menu_appadmin_dispatch \
+        "─// Enter your choice (0-6) [0=Back]: "
 }

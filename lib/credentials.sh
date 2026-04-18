@@ -56,6 +56,17 @@ write_main_credentials() {
 
     cred_write ""
     cred_write "═══════════════════════════════════════════════════════════"
+    cred_write "  PHPMYADMIN — HTTP BASIC AUTH (pre-login gate)"
+    cred_write "═══════════════════════════════════════════════════════════"
+    cred_write "  File      : ${PMA_HTPASSWD_FILE}"
+    cred_write "  Username  : ${PMA_AUTH_USER}"
+    cred_write "  Password  : ${PMA_AUTH_PASS}"
+    cred_write "  Note      : Browser prompts for this BEFORE phpMyAdmin's"
+    cred_write "              login screen. MySQL credentials above are the"
+    cred_write "              second gate. Manage via 'lemp-manage appadmin-*'."
+
+    cred_write ""
+    cred_write "═══════════════════════════════════════════════════════════"
     cred_write "  FILE BROWSER"
     cred_write "═══════════════════════════════════════════════════════════"
     cred_write "  URL path  : ${FB_PATH}"

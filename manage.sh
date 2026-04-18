@@ -118,6 +118,16 @@ _usage() {
     echo "    sftp-user-password [user]    Change a Linux user's password"
     echo "    fail2ban-maxretry [N]        Set fail2ban [DEFAULT] maxretry (1-20)"
     echo ""
+    echo "  Admin apps (phpMyAdmin + File Browser):"
+    echo "    appadmin-list                List admin users for both apps"
+    echo "    appadmin-add [pma|fb] [user] Add an admin user"
+    echo "    appadmin-password [pma|fb] [user]"
+    echo "                                 Change an admin user's password"
+    echo "    appadmin-remove [pma|fb] [user]"
+    echo "                                 Remove an admin user"
+    echo "    appadmin-paths               Rotate /pma-<hex> and /files-<hex>"
+    echo "    appadmin-maxretry [N]        Set [nginx-http-auth] maxretry (1-20)"
+    echo ""
 }
 
 # =============================================================================

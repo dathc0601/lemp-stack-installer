@@ -81,24 +81,8 @@ _filebrowser_set_credentials() {
 }
 
 _filebrowser_write_nginx_snippet() {
-    cat > "${NGINX_SNIPPETS_DIR}/filebrowser.conf" <<FBINCEOF
-location ${FB_PATH} {
-    proxy_pass http://127.0.0.1:${FB_PORT};
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
-
-    # WebSocket support
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection "upgrade";
-
-    proxy_redirect off;
-    proxy_buffering off;
-    client_max_body_size 0;
-
-    limit_req zone=admin burst=20 nodelay;
-}
-FBINCEOF
+    render_template "nginx-filebrowser.conf.tpl" \
+        "FB_PATH" "$FB_PATH" \
+        "FB_PORT" "$FB_PORT" \
+        > "${NGINX_SNIPPETS_DIR}/filebrowser.conf"
 }

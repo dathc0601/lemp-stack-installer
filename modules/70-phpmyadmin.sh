@@ -24,12 +24,16 @@ module_phpmyadmin_install() {
 
     PMA_PATH="/pma-$(generate_url_token)"
     PMA_BLOWFISH=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
+    PMA_AUTH_USER="admin"
+    PMA_AUTH_PASS=$(generate_password 24)
 
     _phpmyadmin_download
     _phpmyadmin_configure
+    _phpmyadmin_write_htpasswd
     _phpmyadmin_write_nginx_snippet
 
     log "phpMyAdmin installed at random path: ${PMA_PATH}"
+    log "phpMyAdmin basic-auth user '${PMA_AUTH_USER}' written to ${PMA_HTPASSWD_FILE}"
     state_mark_installed "phpmyadmin"
 }
 
@@ -69,29 +73,23 @@ _phpmyadmin_configure() {
     chmod 640 "${PMA_DIR}/config.inc.php"
 }
 
+_phpmyadmin_write_htpasswd() {
+    # `-c` creates; subsequent admin-apps runs update with -bB (no -c).
+    # bcrypt (-B) is the strongest supported format.
+    command_exists htpasswd \
+        || err "htpasswd not found — 'apache2-utils' should have been installed by modules/10-base.sh"
+    htpasswd -cbB "$PMA_HTPASSWD_FILE" "$PMA_AUTH_USER" "$PMA_AUTH_PASS" >/dev/null
+    chown "root:${NGINX_USER}" "$PMA_HTPASSWD_FILE"
+    chmod 640 "$PMA_HTPASSWD_FILE"
+}
+
 _phpmyadmin_write_nginx_snippet() {
     # Snippet included by every vhost
-    cat > "${NGINX_SNIPPETS_DIR}/phpmyadmin.conf" <<PMAINCEOF
-location ${PMA_PATH} {
-    alias ${PMA_DIR};
-    index index.php;
-
-    # Rate limit logins
-    limit_req zone=admin burst=20 nodelay;
-
-    location ~ ^${PMA_PATH}/(.+\\.php)\$ {
-        alias ${PMA_DIR}/\$1;
-        include fastcgi_params;
-        fastcgi_pass unix:/run/php/php${PHP_VERSION}-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME \$request_filename;
-        fastcgi_read_timeout ${PHP_MAX_EXEC_TIME};
-    }
-
-    location ~* ^${PMA_PATH}/(.+\\.(jpg|jpeg|gif|css|png|js|ico|html|xml|txt|woff|woff2|ttf|svg))\$ {
-        alias ${PMA_DIR}/\$1;
-        expires 30d;
-        access_log off;
-    }
-}
-PMAINCEOF
+    render_template "nginx-phpmyadmin.conf.tpl" \
+        "PMA_PATH" "$PMA_PATH" \
+        "PMA_DIR" "$PMA_DIR" \
+        "PHP_VERSION" "$PHP_VERSION" \
+        "PHP_MAX_EXEC_TIME" "$PHP_MAX_EXEC_TIME" \
+        "PMA_HTPASSWD_FILE" "$PMA_HTPASSWD_FILE" \
+        > "${NGINX_SNIPPETS_DIR}/phpmyadmin.conf"
 }

@@ -66,11 +66,12 @@ Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
   1) Manage sites              (domains, backups, WordPress)
   2) Manage SSL                (issue, renew, remove certificates)
   3) Manage SSH/SFTP           (port, passwords, fail2ban)
-  4) Server status             (services, disk, memory, SSL)
+  4) Manage admin apps         (users, paths, auth retries)
+  5) Server status             (services, disk, memory, SSL)
 
   0) Exit
 
-─// Enter your choice (0-4) [Ctrl+C=Exit]:
+─// Enter your choice (0-5) [Ctrl+C=Exit]:
 ```
 
 Picking **Manage sites** opens a sub-menu with all site/domain actions:
@@ -120,6 +121,23 @@ Picking **Manage SSH/SFTP** opens a sub-menu for server access hardening. The SS
   0) Back to main menu
 ```
 
+Picking **Manage admin apps** opens a sub-menu for the installer's admin tools — phpMyAdmin (HTTP basic-auth wrapper + path obscurity) and File Browser (native user DB). Every user operation asks which app to target, so the two identity stores stay independent. The default `admin` user and a 24-char random password are created at install time and written to `/root/.server-credentials`.
+
+```
+───────────────────────────────────────────────────────────
+  » 4. Manage admin apps
+───────────────────────────────────────────────────────────
+
+  1) Change admin paths        (rotate /pma-<hex> and /files-<hex>)
+  2) List admin users          (phpMyAdmin + File Browser)
+  3) Add admin user            (pick app, username, password)
+  4) Change admin password     (pick app, user, new password)
+  5) Delete admin user         (pick app, user)
+  6) Auth login retries        (fail2ban [nginx-http-auth] maxretry)
+
+  0) Back to main menu
+```
+
 The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the appropriate menu after each action.
 
 ### `lemp-manage` — CLI (for scripting / automation)
@@ -150,6 +168,15 @@ sudo lemp-manage ssh-port 2222                       # Same, pre-seeded new port
 sudo lemp-manage ssh-root-password                   # Change the root password (silent prompt, min 12 chars)
 sudo lemp-manage sftp-user-password deploy           # Change an existing user's password
 sudo lemp-manage fail2ban-maxretry 3                 # Set fail2ban [DEFAULT] maxretry (1-20)
+
+# Admin apps (phpMyAdmin + File Browser)
+sudo lemp-manage appadmin-list                       # List admin users for both apps
+sudo lemp-manage appadmin-add pma alice              # Add 'alice' to phpMyAdmin basic-auth
+sudo lemp-manage appadmin-add fb bob                 # Add 'bob' to File Browser
+sudo lemp-manage appadmin-password pma alice         # Change alice's phpMyAdmin password
+sudo lemp-manage appadmin-remove pma alice           # Remove alice (refuses if last user)
+sudo lemp-manage appadmin-paths                      # Rotate /pma-<hex> and /files-<hex>
+sudo lemp-manage appadmin-maxretry 3                 # Tune [nginx-http-auth] maxretry (1-20)
 ```
 
 ## Security
@@ -212,6 +239,12 @@ server-setup/
 │   ├── ssh-root-password.sh
 │   ├── sftp-user-password.sh
 │   ├── fail2ban-maxretry.sh
+│   ├── appadmin-list.sh
+│   ├── appadmin-add.sh
+│   ├── appadmin-password.sh
+│   ├── appadmin-remove.sh
+│   ├── appadmin-paths.sh
+│   ├── appadmin-maxretry.sh
 │   └── status.sh
 ├── templates/                 # Nginx/systemd/PHP configs with {{PLACEHOLDER}} markers
 └── tests/
