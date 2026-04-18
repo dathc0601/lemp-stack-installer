@@ -15,7 +15,14 @@ cmd_cache_redis_toggle() {
     command_exists redis-server || err "redis-server not installed."
 
     local current target
-    current=$(systemctl is-active redis-server 2>/dev/null || echo "inactive")
+    # Use --quiet + exit code rather than parsing stdout: Ubuntu's redis
+    # package installs a `redis.service` alias that `disable --now` removes,
+    # after which `systemctl is-active redis-server` prints two lines.
+    if systemctl is-active --quiet redis-server; then
+        current="active"
+    else
+        current="inactive"
+    fi
 
     case "$arg" in
         on|enable)   target="active"   ;;
@@ -46,7 +53,11 @@ cmd_cache_redis_toggle() {
     fi
 
     local new_state
-    new_state=$(systemctl is-active redis-server 2>/dev/null || echo "inactive")
+    if systemctl is-active --quiet redis-server; then
+        new_state="active"
+    else
+        new_state="inactive"
+    fi
     [[ "$new_state" == "$target" ]] \
         || err "Service did not reach expected state: ${new_state} != ${target}."
     log "Redis ${target}."

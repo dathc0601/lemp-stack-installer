@@ -646,13 +646,22 @@ show_appadmin_menu() {
 # =============================================================================
 
 # Read current cache states and print a 3-line status block above the options.
+# Uses --quiet + exit code instead of parsing stdout so unit-alias quirks
+# (e.g. redis.service alias removed by `disable --now`) can't corrupt the
+# status display.
 _menu_cache_status() {
     local redis_s mc_s opc_s opc_val
-    redis_s=$(systemctl is-active redis-server 2>/dev/null || echo "inactive")
-    if command_exists memcached; then
-        mc_s=$(systemctl is-active memcached 2>/dev/null || echo "inactive")
+    if systemctl is-active --quiet redis-server 2>/dev/null; then
+        redis_s="active"
     else
+        redis_s="inactive"
+    fi
+    if ! command_exists memcached; then
         mc_s="not installed"
+    elif systemctl is-active --quiet memcached 2>/dev/null; then
+        mc_s="active"
+    else
+        mc_s="inactive"
     fi
     opc_val=$(grep -E '^opcache\.enable\s*=' \
         "/etc/php/${PHP_VERSION}/fpm/php.ini" 2>/dev/null \

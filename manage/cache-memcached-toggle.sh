@@ -16,7 +16,13 @@ cmd_cache_memcached_toggle() {
         || err "Memcached not installed. Re-run bootstrap: curl -fsSL https://raw.githubusercontent.com/dathc0601/lemp-stack-installer/main/bootstrap.sh | sudo bash"
 
     local current target
-    current=$(systemctl is-active memcached 2>/dev/null || echo "inactive")
+    # Use --quiet + exit code rather than parsing stdout — matches the
+    # redis-toggle pattern and sidesteps any unit-alias stdout quirks.
+    if systemctl is-active --quiet memcached; then
+        current="active"
+    else
+        current="inactive"
+    fi
 
     case "$arg" in
         on|enable)   target="active"   ;;
@@ -47,7 +53,11 @@ cmd_cache_memcached_toggle() {
     fi
 
     local new_state
-    new_state=$(systemctl is-active memcached 2>/dev/null || echo "inactive")
+    if systemctl is-active --quiet memcached; then
+        new_state="active"
+    else
+        new_state="inactive"
+    fi
     [[ "$new_state" == "$target" ]] \
         || err "Service did not reach expected state: ${new_state} != ${target}."
     log "Memcached ${target}."
