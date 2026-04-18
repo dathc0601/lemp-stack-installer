@@ -83,6 +83,15 @@ _appadmin_add_pma() {
 
     _detect_nginx_user  # ensures NGINX_USER is set for chown
 
+    # Existing installs done before apache2-utils landed in modules/10-base.sh
+    # won't have htpasswd. Self-heal on demand — the first time a user exercises
+    # this branch, we pull in the package. Subsequent runs short-circuit.
+    if ! command_exists htpasswd; then
+        info "Installing apache2-utils (provides htpasswd) — one-time dependency..."
+        apt_install apache2-utils \
+            || err "apt_install apache2-utils failed. Install manually and retry."
+    fi
+
     if [[ ! -f "$PMA_HTPASSWD_FILE" ]]; then
         info "Creating ${PMA_HTPASSWD_FILE} (first PMA admin user)..."
         htpasswd -cbB "$PMA_HTPASSWD_FILE" "$user" "$pass" >/dev/null \

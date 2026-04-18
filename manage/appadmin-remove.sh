@@ -28,6 +28,11 @@ _appadmin_remove_pma() {
         err "Refusing to remove the last phpMyAdmin admin user — would lock out every request with 401. Add a replacement first: lemp-manage appadmin-add pma <new-user>."
     fi
 
+    if ! command_exists htpasswd; then
+        info "Installing apache2-utils (provides htpasswd)..."
+        apt_install apache2-utils \
+            || err "apt_install apache2-utils failed. Install manually and retry."
+    fi
     htpasswd -D "$PMA_HTPASSWD_FILE" "$user" >/dev/null \
         || err "htpasswd -D failed."
     log "Removed phpMyAdmin admin user '${user}'."

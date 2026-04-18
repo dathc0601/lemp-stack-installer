@@ -41,6 +41,11 @@ _appadmin_change_pma_password() {
         || err "No htpasswd file: ${PMA_HTPASSWD_FILE}. Add a user first with appadmin-add."
     grep -q "^${user}:" "$PMA_HTPASSWD_FILE" \
         || err "User '${user}' not found in ${PMA_HTPASSWD_FILE}."
+    if ! command_exists htpasswd; then
+        info "Installing apache2-utils (provides htpasswd)..."
+        apt_install apache2-utils \
+            || err "apt_install apache2-utils failed. Install manually and retry."
+    fi
     htpasswd -bB "$PMA_HTPASSWD_FILE" "$user" "$pass" >/dev/null \
         || err "htpasswd update failed."
     log "phpMyAdmin password updated for '${user}'."
