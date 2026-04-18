@@ -247,6 +247,72 @@ _menu_pick_pma_user() {
     echo "${users[$((reply - 1))]}"
 }
 
+# Present a numbered picker of user-schemas (system DBs filtered out), with
+# per-row size + credentials-file linkage. Relies on $MYSQL_ROOT_PASS being
+# set — callers must run _read_mysql_root_pass BEFORE invoking this picker.
+# Returns the selected DB name on stdout; UI goes to stderr.
+#   Usage: name=$(_menu_pick_database [all|standalone|linked]) || return 0
+_menu_pick_database() {
+    local filter="${1:-all}"
+    local databases=() sizes=() owners=() name size owner
+    local sql
+    sql='SELECT s.SCHEMA_NAME,
+            COALESCE(ROUND(SUM(t.data_length + t.index_length)/1024/1024, 2), 0)
+        FROM information_schema.SCHEMATA s
+        LEFT JOIN information_schema.TABLES t ON t.table_schema = s.SCHEMA_NAME
+        WHERE s.SCHEMA_NAME NOT IN ("mysql","information_schema","performance_schema","sys")
+        GROUP BY s.SCHEMA_NAME ORDER BY s.SCHEMA_NAME;'
+
+    while IFS=$'\t' read -r name size; do
+        [[ -n "$name" ]] || continue
+        owner=$(_find_db_owner "$name" 2>/dev/null || true)
+        case "$filter" in
+            standalone) [[ "$owner" == \[db:* ]] || continue ;;
+            linked)     [[ -n "$owner" && "$owner" != \[db:* ]] || continue ;;
+            all|*)      ;;
+        esac
+        databases+=("$name")
+        sizes+=("$size")
+        owners+=("$owner")
+    done < <(mariadb -u root -p"${MYSQL_ROOT_PASS}" -N -B -e "$sql" 2>/dev/null || true)
+
+    if [[ ${#databases[@]} -eq 0 ]]; then
+        case "$filter" in
+            standalone) warn "No standalone databases. Use db-add to create one." >&2 ;;
+            linked)     warn "No domain-linked databases. Use add-domain to create one." >&2 ;;
+            *)          warn "No databases found." >&2 ;;
+        esac
+        return 1
+    fi
+
+    {
+        echo ""
+        local i label
+        for ((i=0; i<${#databases[@]}; i++)); do
+            if [[ -z "${owners[$i]}" ]]; then
+                label="(untracked)"
+            elif [[ "${owners[$i]}" == \[db:* ]]; then
+                label="(standalone)"
+            else
+                label="${owners[$i]#\[}"
+                label="${label%\]}"
+            fi
+            printf "  %d) %-30s  %7s MB  %s\n" "$((i + 1))" "${databases[$i]}" "${sizes[$i]}" "$label"
+        done
+        echo ""
+    } >&2
+
+    local reply
+    if ! read -rp "─// Select a database (1-${#databases[@]}) [0=Cancel]: " reply; then
+        echo "" >&2; return 1
+    fi
+    [[ "$reply" == "0" ]] && return 1
+    [[ "$reply" =~ ^[0-9]+$ ]] || { warn "Invalid selection: ${reply}" >&2; return 1; }
+    [[ "$reply" -ge 1 && "$reply" -le ${#databases[@]} ]] \
+        || { warn "Out of range: ${reply}" >&2; return 1; }
+    echo "${databases[$((reply - 1))]}"
+}
+
 # Picker for existing File Browser users. Parses `filebrowser users ls`.
 _menu_pick_fb_user() {
     if ! command_exists filebrowser; then
@@ -332,11 +398,12 @@ _menu_loop() {
 
 _menu_main_options() {
     echo "  1) Manage sites              (domains, backups, WordPress)"
-    echo "  2) Manage SSL                (issue, renew, remove certificates)"
-    echo "  3) Manage SSH/SFTP           (port, passwords, fail2ban)"
-    echo "  4) Manage admin apps         (users, paths, auth retries)"
-    echo "  5) Manage cache              (Redis, Memcached, OPcache)"
-    echo "  6) Server status             (services, disk, memory, SSL)"
+    echo "  2) Manage databases          (list, info, add, delete, import, export)"
+    echo "  3) Manage SSL                (issue, renew, remove certificates)"
+    echo "  4) Manage SSH/SFTP           (port, passwords, fail2ban)"
+    echo "  5) Manage admin apps         (users, paths, auth retries)"
+    echo "  6) Manage cache              (Redis, Memcached, OPcache)"
+    echo "  7) Server status             (services, disk, memory, SSL)"
     echo ""
     echo "  0) Exit"
     echo ""
@@ -350,22 +417,26 @@ _menu_main_dispatch() {
             return 2  # sub-menu already drew its own frame; skip pause
             ;;
         2)
-            show_ssl_menu
+            show_databases_menu
             return 2
             ;;
         3)
-            show_ssh_menu
+            show_ssl_menu
             return 2
             ;;
         4)
-            show_appadmin_menu
+            show_ssh_menu
             return 2
             ;;
         5)
-            show_cache_menu
+            show_appadmin_menu
             return 2
             ;;
         6)
+            show_cache_menu
+            return 2
+            ;;
+        7)
             ( cmd_status ) || true
             ;;
         0|q|Q|exit|quit)
@@ -611,7 +682,7 @@ _menu_load_commands() {
 show_menu() {
     _menu_load_commands
     _menu_loop "" _menu_main_options _menu_main_dispatch \
-        "─// Enter your choice (0-6) [Ctrl+C=Exit]: "
+        "─// Enter your choice (0-7) [Ctrl+C=Exit]: "
     echo ""
     info "Goodbye."
 }
@@ -625,19 +696,19 @@ show_sites_menu() {
 
 # SSL sub-menu — invoked from _menu_main_dispatch.
 show_ssl_menu() {
-    _menu_loop "2. Manage SSL" _menu_ssl_options _menu_ssl_dispatch \
+    _menu_loop "3. Manage SSL" _menu_ssl_options _menu_ssl_dispatch \
         "─// Enter your choice (0-4) [0=Back]: "
 }
 
 # SSH/SFTP sub-menu — invoked from _menu_main_dispatch.
 show_ssh_menu() {
-    _menu_loop "3. Manage SSH/SFTP" _menu_ssh_options _menu_ssh_dispatch \
+    _menu_loop "4. Manage SSH/SFTP" _menu_ssh_options _menu_ssh_dispatch \
         "─// Enter your choice (0-4) [0=Back]: "
 }
 
 # Admin apps sub-menu — invoked from _menu_main_dispatch.
 show_appadmin_menu() {
-    _menu_loop "4. Manage admin apps" _menu_appadmin_options _menu_appadmin_dispatch \
+    _menu_loop "5. Manage admin apps" _menu_appadmin_options _menu_appadmin_dispatch \
         "─// Enter your choice (0-6) [0=Back]: "
 }
 
@@ -706,6 +777,81 @@ _menu_cache_dispatch() {
 
 # Cache sub-menu — invoked from _menu_main_dispatch.
 show_cache_menu() {
-    _menu_loop "5. Manage cache" _menu_cache_options _menu_cache_dispatch \
+    _menu_loop "6. Manage cache" _menu_cache_options _menu_cache_dispatch \
         "─// Enter your choice (0-5) [0=Back]: "
+}
+
+# =============================================================================
+#  DATABASES SUB-MENU
+# =============================================================================
+
+# Render a 2-line status header above the databases menu options.
+# Reads root pass directly from the credentials file (no err-exit) so a
+# missing/broken credentials file degrades gracefully to "unknown" instead
+# of killing the entire TUI session.
+_menu_databases_status() {
+    local root_pass="" version="" db_count="?" total_size="?" state
+    if [[ -f "$CREDENTIALS_FILE" ]]; then
+        root_pass=$(grep -E '^\s+Root pass\s*:' "$CREDENTIALS_FILE" 2>/dev/null \
+            | awk -F': ' '{print $2}' | tr -d ' ' || true)
+    fi
+    if [[ -n "$root_pass" ]]; then
+        version=$(mariadb -u root -p"${root_pass}" -N -B -e "SELECT VERSION();" 2>/dev/null | head -1 || true)
+        local stats
+        stats=$(mariadb -u root -p"${root_pass}" -N -B -e \
+            "SELECT COUNT(DISTINCT s.SCHEMA_NAME),
+                    COALESCE(ROUND(SUM(t.data_length + t.index_length)/1024/1024, 2), 0)
+             FROM information_schema.SCHEMATA s
+             LEFT JOIN information_schema.TABLES t ON t.table_schema = s.SCHEMA_NAME
+             WHERE s.SCHEMA_NAME NOT IN ('mysql','information_schema','performance_schema','sys');" \
+            2>/dev/null || true)
+        if [[ -n "$stats" ]]; then
+            db_count=$(echo "$stats" | awk '{print $1}')
+            total_size=$(echo "$stats" | awk '{print $2}')
+        fi
+    fi
+    if systemctl is-active --quiet mariadb 2>/dev/null; then
+        state="active"
+    else
+        state="inactive"
+    fi
+    echo "  MariaDB: ${version:-unknown} — ${state}"
+    echo "  Databases: ${db_count} user DBs, ${total_size} MB total"
+    echo ""
+}
+
+_menu_databases_options() {
+    _menu_databases_status
+    echo "  1) List databases              (name, size, tables, linked domain)"
+    echo "  2) Database info               (detailed: charset, users, last export)"
+    echo "  3) Add database                (create DB + user + password)"
+    echo "  4) Change DB user password     (rotate password for a DB user)"
+    echo "  5) Delete database             (drop DB + user + credentials block)"
+    echo "  6) Import database             (load .sql/.sql.gz into existing DB)"
+    echo "  7) Export database             (dump DB to /var/backups/databases/*.sql.gz)"
+    echo ""
+    echo "  0) Back to main menu"
+    echo ""
+}
+
+_menu_databases_dispatch() {
+    case "$1" in
+        1) ( cmd_db_list )           || true ;;
+        2) ( cmd_db_info )           || true ;;
+        3) ( cmd_db_add )            || true ;;
+        4) ( cmd_db_user_password )  || true ;;
+        5) ( cmd_db_remove )         || true ;;
+        6) ( cmd_db_import )         || true ;;
+        7) ( cmd_db_export )         || true ;;
+        0|b|B|back) return 1 ;;
+        "") ;;
+        *) warn "Invalid choice: ${1}" ;;
+    esac
+    return 0
+}
+
+# Databases sub-menu — invoked from _menu_main_dispatch.
+show_databases_menu() {
+    _menu_loop "2. Manage databases" _menu_databases_options _menu_databases_dispatch \
+        "─// Enter your choice (0-7) [0=Back]: "
 }

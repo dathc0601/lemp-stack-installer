@@ -90,6 +90,154 @@ _read_domain_db_pass() {
     ' "$CREDENTIALS_FILE" || true
 }
 
+# =============================================================================
+#  DATABASE HELPERS (used by manage/db-*.sh commands)
+# =============================================================================
+
+# Validate a MariaDB identifier — alphanumeric + underscore, 1-64 chars.
+# Guards against SQL injection since names are interpolated into queries.
+_validate_db_name() {
+    [[ "$1" =~ ^[a-zA-Z0-9_]{1,64}$ ]]
+}
+
+# Return 0 if the schema exists, 1 otherwise. Requires MYSQL_ROOT_PASS.
+_db_exists() {
+    local name="$1" count
+    count=$(mariadb -u root -p"${MYSQL_ROOT_PASS}" -N -B -e \
+        "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${name}';" \
+        2>/dev/null || echo "0")
+    [[ "$count" == "1" ]]
+}
+
+# Print user-schema names (system DBs filtered out), one per line.
+_list_user_databases() {
+    mariadb -u root -p"${MYSQL_ROOT_PASS}" -N -B -e \
+        "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA
+         WHERE SCHEMA_NAME NOT IN ('mysql','information_schema','performance_schema','sys')
+         ORDER BY SCHEMA_NAME;" 2>/dev/null || true
+}
+
+# Find the credentials-file block that owns a given DB name.
+# Echoes the full header (e.g. "[db:mydb]" or "[example.com]") or nothing.
+# Scans blocks for a "Database : NAME" line, where NAME may have a trailing
+# " (…)" annotation from the idempotent install path.
+_find_db_owner() {
+    local db_name="$1"
+    [[ -f "$CREDENTIALS_FILE" ]] || return 0
+    awk -v target="$db_name" '
+        /^\[.*\]$/ { block=$0; next }
+        {
+            # Line shape: "  Database  : value [ (annotation)]"
+            if (match($0, /^[ \t]+Database[ \t]*:[ \t]*/)) {
+                v = substr($0, RSTART + RLENGTH)
+                sub(/[ \t]+\(.*\)$/, "", v)
+                sub(/[ \t]+$/, "", v)
+                if (v == target) {
+                    print block
+                    exit
+                }
+            }
+        }
+    ' "$CREDENTIALS_FILE" 2>/dev/null || true
+}
+
+# Remove a credentials block identified by its header line (e.g. "[db:mydb]").
+# Also drops the single blank line immediately preceding the header, if any,
+# so repeated add/remove cycles don't accumulate blank gaps.
+# Atomic: writes tempfile, mv, re-applies mode 600.
+_remove_cred_block() {
+    local header="$1"
+    [[ -f "$CREDENTIALS_FILE" ]] || return 0
+    local tmp
+    tmp=$(mktemp)
+    awk -v hdr="$header" '
+        BEGIN { held_blank=0; in_block=0 }
+        {
+            if (in_block) {
+                if ($0 ~ /^\[/ || $0 ~ /^═+$/) {
+                    in_block=0
+                    # Fall through to non-block handling for this line
+                } else {
+                    next
+                }
+            }
+            if ($0 == hdr) {
+                in_block=1
+                held_blank=0   # drop the blank line we were holding
+                next
+            }
+            if ($0 == "") {
+                if (held_blank) print ""
+                held_blank=1
+                next
+            }
+            if (held_blank) { print ""; held_blank=0 }
+            print
+        }
+        END { if (held_blank) print "" }
+    ' "$CREDENTIALS_FILE" > "$tmp"
+    mv "$tmp" "$CREDENTIALS_FILE"
+    chmod 600 "$CREDENTIALS_FILE"
+}
+
+# Update a single field within a credentials block.
+# Usage: _update_cred_field "[db:mydb]" "DB pass" "newvalue"
+# Preserves the original indent and field-name alignment on the line.
+_update_cred_field() {
+    local header="$1" field="$2" value="$3"
+    [[ -f "$CREDENTIALS_FILE" ]] || return 1
+    local tmp
+    tmp=$(mktemp)
+    awk -v hdr="$header" -v fld="$field" -v val="$value" '
+        BEGIN { in_block=0 }
+        $0 == hdr { in_block=1; print; next }
+        in_block && /^\[/ { in_block=0 }
+        in_block && /^═+$/ { in_block=0 }
+        {
+            if (in_block) {
+                pat = "^[ \t]+" fld "[ \t]*:[ \t]*"
+                if (match($0, pat)) {
+                    printf "%s%s\n", substr($0, 1, RLENGTH), val
+                    next
+                }
+            }
+            print
+        }
+    ' "$CREDENTIALS_FILE" > "$tmp"
+    mv "$tmp" "$CREDENTIALS_FILE"
+    chmod 600 "$CREDENTIALS_FILE"
+}
+
+# Prompt for a password. Empty input → auto-generate 24 chars; typed input
+# requires min 12 chars + a second confirm-prompt. Writes the result into the
+# nameref variable.
+#   Usage: _prompt_password_or_generate out_var "New"
+_prompt_password_or_generate() {
+    local -n _out_ref="$1"
+    local label="${2:-New}"
+    local pass1 pass2
+    while true; do
+        read -rsp "  ${label} password (empty = generate 24-char): " pass1; echo ""
+        if [[ -z "$pass1" ]]; then
+            _out_ref=$(generate_password 24)
+            info "Generated password — will be saved to ${CREDENTIALS_FILE}."
+            return 0
+        fi
+        if [[ ${#pass1} -lt 12 ]]; then
+            warn "Password too short (${#pass1} chars; minimum 12). Try again."
+            continue
+        fi
+        read -rsp "  Confirm                                    : " pass2; echo ""
+        if [[ "$pass1" != "$pass2" ]]; then
+            warn "Passwords don't match. Try again."
+            continue
+        fi
+        _out_ref="$pass1"
+        pass1=""; pass2=""
+        return 0
+    done
+}
+
 # Print usage and available commands.
 _usage() {
     echo ""
@@ -134,6 +282,15 @@ _usage() {
     echo "    cache-opcache-toggle [on|off]   Toggle or set OPcache (edits php.ini)"
     echo "    cache-opcache-reset             Flush compiled bytecode (reloads php-fpm)"
     echo "    cache-clear                     Flush Redis + Memcached + reset OPcache"
+    echo ""
+    echo "  Databases:"
+    echo "    db-list                         List databases (size, tables, domain link)"
+    echo "    db-info <name>                  Show DB details (charset, users, last export)"
+    echo "    db-add [name]                   Create standalone DB + user + password"
+    echo "    db-user-password [name]         Rotate password for a DB's user"
+    echo "    db-remove [name]                Drop DB + its dedicated users + cred block"
+    echo "    db-import <file> <name>         Load .sql/.sql.gz into existing DB"
+    echo "    db-export [name]                Dump DB to /var/backups/databases/*.sql.gz"
     echo ""
 }
 

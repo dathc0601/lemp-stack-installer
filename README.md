@@ -65,15 +65,16 @@ Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
 ───────────────────────────────────────────────────────────
 
   1) Manage sites              (domains, backups, WordPress)
-  2) Manage SSL                (issue, renew, remove certificates)
-  3) Manage SSH/SFTP           (port, passwords, fail2ban)
-  4) Manage admin apps         (users, paths, auth retries)
-  5) Manage cache              (Redis, Memcached, OPcache)
-  6) Server status             (services, disk, memory, SSL)
+  2) Manage databases          (list, info, add, delete, import, export)
+  3) Manage SSL                (issue, renew, remove certificates)
+  4) Manage SSH/SFTP           (port, passwords, fail2ban)
+  5) Manage admin apps         (users, paths, auth retries)
+  6) Manage cache              (Redis, Memcached, OPcache)
+  7) Server status             (services, disk, memory, SSL)
 
   0) Exit
 
-─// Enter your choice (0-6) [Ctrl+C=Exit]:
+─// Enter your choice (0-7) [Ctrl+C=Exit]:
 ```
 
 Picking **Manage sites** opens a sub-menu with all site/domain actions:
@@ -93,11 +94,32 @@ Picking **Manage sites** opens a sub-menu with all site/domain actions:
   0) Back to main menu
 ```
 
+Picking **Manage databases** opens a sub-menu for day-2 MariaDB operations — separate from the per-domain databases created by `add-domain`. Use this for standalone databases (staging copies, manual apps), rotating a DB user's password, surgically exporting one DB to `.sql.gz`, or importing a dump into an existing DB. A live status header shows MariaDB version, service state, and the total DB count/size. Deleting a DB that's linked to a configured domain warns loudly first.
+
+```
+───────────────────────────────────────────────────────────
+  » 2. Manage databases
+───────────────────────────────────────────────────────────
+
+  MariaDB: 10.11.6 — active
+  Databases: 4 user DBs, 58.3 MB total
+
+  1) List databases              (name, size, tables, linked domain)
+  2) Database info               (detailed: charset, users, last export)
+  3) Add database                (create DB + user + password)
+  4) Change DB user password     (rotate password for a DB user)
+  5) Delete database             (drop DB + user + credentials block)
+  6) Import database             (load .sql/.sql.gz into existing DB)
+  7) Export database             (dump DB to /var/backups/databases/*.sql.gz)
+
+  0) Back to main menu
+```
+
 Picking **Manage SSL** opens a sub-menu with Let's Encrypt actions. Each action that needs a domain shows a numbered picker filtered by SSL state — pick `2) Issue SSL` and you'll only see domains that don't yet have a certificate:
 
 ```
 ───────────────────────────────────────────────────────────
-  » 2. Manage SSL
+  » 3. Manage SSL
 ───────────────────────────────────────────────────────────
 
   1) List SSL certificates     (domains with/without SSL, expiry)
@@ -112,7 +134,7 @@ Picking **Manage SSH/SFTP** opens a sub-menu for server access hardening. The SS
 
 ```
 ───────────────────────────────────────────────────────────
-  » 3. Manage SSH/SFTP
+  » 4. Manage SSH/SFTP
 ───────────────────────────────────────────────────────────
 
   1) Change SSH port           (sshd drop-in + UFW + fail2ban)
@@ -127,7 +149,7 @@ Picking **Manage admin apps** opens a sub-menu for the installer's admin tools �
 
 ```
 ───────────────────────────────────────────────────────────
-  » 4. Manage admin apps
+  » 5. Manage admin apps
 ───────────────────────────────────────────────────────────
 
   1) Change admin paths        (rotate /pma-<hex> and /files-<hex>)
@@ -144,7 +166,7 @@ Picking **Manage cache** opens a sub-menu for the three cache layers the stack e
 
 ```
 ───────────────────────────────────────────────────────────
-  » 5. Manage cache
+  » 6. Manage cache
 ───────────────────────────────────────────────────────────
 
   Status:
@@ -208,6 +230,15 @@ sudo lemp-manage cache-memcached-toggle on           # Start + enable at boot
 sudo lemp-manage cache-opcache-toggle                # Flip OPcache (edits FPM + CLI php.ini, reloads FPM)
 sudo lemp-manage cache-opcache-reset                 # Flush compiled bytecode (reloads php-fpm)
 sudo lemp-manage cache-clear                         # Flush Redis + Memcached + reset OPcache
+
+# Databases (standalone DB management — separate from domain-linked DBs)
+sudo lemp-manage db-list                             # List user DBs (size, tables, domain link)
+sudo lemp-manage db-info staging_copy                # Show charset, users, last export, size
+sudo lemp-manage db-add staging_copy                 # Create DB + user + password; writes [db:...] block
+sudo lemp-manage db-user-password staging_copy       # Rotate the DB user's password
+sudo lemp-manage db-remove staging_copy              # Drop DB + dedicated users + credentials block
+sudo lemp-manage db-export staging_copy              # Dump to /var/backups/databases/*.sql.gz
+sudo lemp-manage db-import /path/to/dump.sql.gz staging_copy
 ```
 
 ## Security
@@ -282,6 +313,13 @@ server-setup/
 │   ├── cache-opcache-toggle.sh
 │   ├── cache-opcache-reset.sh
 │   ├── cache-clear.sh
+│   ├── db-list.sh
+│   ├── db-info.sh
+│   ├── db-add.sh
+│   ├── db-user-password.sh
+│   ├── db-remove.sh
+│   ├── db-import.sh
+│   ├── db-export.sh
 │   └── status.sh
 ├── templates/                 # Nginx/systemd/PHP configs with {{PLACEHOLDER}} markers
 └── tests/
