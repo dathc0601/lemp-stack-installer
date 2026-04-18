@@ -128,6 +128,13 @@ _usage() {
     echo "    appadmin-paths               Rotate /pma-<hex> and /files-<hex>"
     echo "    appadmin-maxretry [N]        Set [nginx-http-auth] maxretry (1-20)"
     echo ""
+    echo "  Cache (Redis, Memcached, OPcache):"
+    echo "    cache-redis-toggle [on|off]     Toggle or set Redis service state"
+    echo "    cache-memcached-toggle [on|off] Toggle or set Memcached service state"
+    echo "    cache-opcache-toggle [on|off]   Toggle or set OPcache (edits php.ini)"
+    echo "    cache-opcache-reset             Flush compiled bytecode (reloads php-fpm)"
+    echo "    cache-clear                     Flush Redis + Memcached + reset OPcache"
+    echo ""
 }
 
 # =============================================================================

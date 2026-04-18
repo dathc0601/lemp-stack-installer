@@ -55,6 +55,7 @@ main() {
     run_module "mariadb"
     run_module "php"
     run_module "redis"
+    run_module "memcached"
     run_module "composer"
     run_module "nodejs"
     run_module "certbot"

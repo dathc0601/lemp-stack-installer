@@ -335,7 +335,8 @@ _menu_main_options() {
     echo "  2) Manage SSL                (issue, renew, remove certificates)"
     echo "  3) Manage SSH/SFTP           (port, passwords, fail2ban)"
     echo "  4) Manage admin apps         (users, paths, auth retries)"
-    echo "  5) Server status             (services, disk, memory, SSL)"
+    echo "  5) Manage cache              (Redis, Memcached, OPcache)"
+    echo "  6) Server status             (services, disk, memory, SSL)"
     echo ""
     echo "  0) Exit"
     echo ""
@@ -361,6 +362,10 @@ _menu_main_dispatch() {
             return 2
             ;;
         5)
+            show_cache_menu
+            return 2
+            ;;
+        6)
             ( cmd_status ) || true
             ;;
         0|q|Q|exit|quit)
@@ -606,7 +611,7 @@ _menu_load_commands() {
 show_menu() {
     _menu_load_commands
     _menu_loop "" _menu_main_options _menu_main_dispatch \
-        "─// Enter your choice (0-5) [Ctrl+C=Exit]: "
+        "─// Enter your choice (0-6) [Ctrl+C=Exit]: "
     echo ""
     info "Goodbye."
 }
@@ -634,4 +639,64 @@ show_ssh_menu() {
 show_appadmin_menu() {
     _menu_loop "4. Manage admin apps" _menu_appadmin_options _menu_appadmin_dispatch \
         "─// Enter your choice (0-6) [0=Back]: "
+}
+
+# =============================================================================
+#  CACHE SUB-MENU
+# =============================================================================
+
+# Read current cache states and print a 3-line status block above the options.
+_menu_cache_status() {
+    local redis_s mc_s opc_s opc_val
+    redis_s=$(systemctl is-active redis-server 2>/dev/null || echo "inactive")
+    if command_exists memcached; then
+        mc_s=$(systemctl is-active memcached 2>/dev/null || echo "inactive")
+    else
+        mc_s="not installed"
+    fi
+    opc_val=$(grep -E '^opcache\.enable\s*=' \
+        "/etc/php/${PHP_VERSION}/fpm/php.ini" 2>/dev/null \
+        | awk -F= '{print $2}' | tr -d ' ' || true)
+    case "$opc_val" in
+        1) opc_s="enabled"  ;;
+        0) opc_s="disabled" ;;
+        *) opc_s="unknown"  ;;
+    esac
+    echo "  Status:"
+    echo "    Redis      : ${redis_s}"
+    echo "    Memcached  : ${mc_s}"
+    echo "    OPcache    : ${opc_s} (FPM)"
+    echo ""
+}
+
+_menu_cache_options() {
+    _menu_cache_status
+    echo "  1) Toggle Redis              (enable/disable redis-server)"
+    echo "  2) Toggle Memcached          (enable/disable memcached)"
+    echo "  3) Toggle OPcache            (opcache.enable in php.ini)"
+    echo "  4) Reset OPcache             (reload FPM to flush bytecode)"
+    echo "  5) Clear all caches          (flush Redis + Memcached + OPcache)"
+    echo ""
+    echo "  0) Back to main menu"
+    echo ""
+}
+
+_menu_cache_dispatch() {
+    case "$1" in
+        1) ( cmd_cache_redis_toggle )     || true ;;
+        2) ( cmd_cache_memcached_toggle ) || true ;;
+        3) ( cmd_cache_opcache_toggle )   || true ;;
+        4) ( cmd_cache_opcache_reset )    || true ;;
+        5) ( cmd_cache_clear )            || true ;;
+        0|q|Q) return 1 ;;
+        "") ;;
+        *) warn "Invalid choice: ${1}" ;;
+    esac
+    return 0
+}
+
+# Cache sub-menu — invoked from _menu_main_dispatch.
+show_cache_menu() {
+    _menu_loop "5. Manage cache" _menu_cache_options _menu_cache_dispatch \
+        "─// Enter your choice (0-5) [0=Back]: "
 }

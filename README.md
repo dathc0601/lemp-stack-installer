@@ -10,6 +10,7 @@ One-command LEMP stack installer for Ubuntu 22.04 and 24.04. Sets up a productio
 | **MariaDB** | 11.4 | Secured root, InnoDB tuning, per-domain databases |
 | **PHP** | 8.4 | 17 extensions, FPM tuned for production |
 | **Redis** | Latest | Server + PHP extension |
+| **Memcached** | Latest | Server + PHP extension (localhost-only) |
 | **Composer** | Latest | SHA384 checksum verified |
 | **Node.js** | 22 LTS | Via NodeSource |
 | **Certbot** | Latest | Nginx plugin, auto-renewal via timer |
@@ -67,11 +68,12 @@ Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
   2) Manage SSL                (issue, renew, remove certificates)
   3) Manage SSH/SFTP           (port, passwords, fail2ban)
   4) Manage admin apps         (users, paths, auth retries)
-  5) Server status             (services, disk, memory, SSL)
+  5) Manage cache              (Redis, Memcached, OPcache)
+  6) Server status             (services, disk, memory, SSL)
 
   0) Exit
 
-─// Enter your choice (0-5) [Ctrl+C=Exit]:
+─// Enter your choice (0-6) [Ctrl+C=Exit]:
 ```
 
 Picking **Manage sites** opens a sub-menu with all site/domain actions:
@@ -138,6 +140,27 @@ Picking **Manage admin apps** opens a sub-menu for the installer's admin tools �
   0) Back to main menu
 ```
 
+Picking **Manage cache** opens a sub-menu for the three cache layers the stack exposes to application code — **Redis** (object cache / sessions), **Memcached** (session / object cache), and **Zend OPcache** (PHP bytecode). The sub-menu shows a live status header (active/inactive/enabled) so you know the current state before picking an action. Toggling a service is a true on/off (saves RAM on tiny VPSes); "Reset OPcache" reloads PHP-FPM to flush compiled bytecode without disabling the extension.
+
+```
+───────────────────────────────────────────────────────────
+  » 5. Manage cache
+───────────────────────────────────────────────────────────
+
+  Status:
+    Redis      : active
+    Memcached  : active
+    OPcache    : enabled (FPM)
+
+  1) Toggle Redis              (enable/disable redis-server)
+  2) Toggle Memcached          (enable/disable memcached)
+  3) Toggle OPcache            (opcache.enable in php.ini)
+  4) Reset OPcache             (reload FPM to flush bytecode)
+  5) Clear all caches          (flush Redis + Memcached + OPcache)
+
+  0) Back to main menu
+```
+
 The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the appropriate menu after each action.
 
 ### `lemp-manage` — CLI (for scripting / automation)
@@ -177,6 +200,14 @@ sudo lemp-manage appadmin-password pma alice         # Change alice's phpMyAdmin
 sudo lemp-manage appadmin-remove pma alice           # Remove alice (refuses if last user)
 sudo lemp-manage appadmin-paths                      # Rotate /pma-<hex> and /files-<hex>
 sudo lemp-manage appadmin-maxretry 3                 # Tune [nginx-http-auth] maxretry (1-20)
+
+# Cache (Redis, Memcached, OPcache)
+sudo lemp-manage cache-redis-toggle                  # Flip Redis service state
+sudo lemp-manage cache-redis-toggle off              # Stop + disable at boot
+sudo lemp-manage cache-memcached-toggle on           # Start + enable at boot
+sudo lemp-manage cache-opcache-toggle                # Flip OPcache (edits FPM + CLI php.ini, reloads FPM)
+sudo lemp-manage cache-opcache-reset                 # Flush compiled bytecode (reloads php-fpm)
+sudo lemp-manage cache-clear                         # Flush Redis + Memcached + reset OPcache
 ```
 
 ## Security
@@ -213,6 +244,7 @@ server-setup/
 │   ├── 30-mariadb.sh          # MariaDB
 │   ├── 40-php.sh              # PHP 8.4 + FPM
 │   ├── 45-redis.sh            # Redis server
+│   ├── 45a-memcached.sh       # Memcached server + php-memcached
 │   ├── 50-composer.sh         # Composer
 │   ├── 55-nodejs.sh           # Node.js
 │   ├── 60-certbot.sh          # Certbot
@@ -245,6 +277,11 @@ server-setup/
 │   ├── appadmin-remove.sh
 │   ├── appadmin-paths.sh
 │   ├── appadmin-maxretry.sh
+│   ├── cache-redis-toggle.sh
+│   ├── cache-memcached-toggle.sh
+│   ├── cache-opcache-toggle.sh
+│   ├── cache-opcache-reset.sh
+│   ├── cache-clear.sh
 │   └── status.sh
 ├── templates/                 # Nginx/systemd/PHP configs with {{PLACEHOLDER}} markers
 └── tests/
