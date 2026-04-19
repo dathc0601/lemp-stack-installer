@@ -939,7 +939,14 @@ _menu_php_dispatch() {
     case "$1" in
         1) ( cmd_php_config )  || true ;;
         2) ( cmd_php_pool )    || true ;;
-        3) ( cmd_php_version ) || true ;;
+        3)
+            # cmd_php_version runs in a subshell, so any $PHP_VERSION assignment
+            # it makes is lost. Re-read the state file here so the parent shell
+            # (and every subsequent redraw / sub-command) sees the new active
+            # version. _core_reload_php_version is defined in lib/core.sh.
+            ( cmd_php_version ) || true
+            _core_reload_php_version
+            ;;
         0|b|B|back) return 1 ;;
         "") ;;
         *) warn "Invalid choice: ${1}" ;;

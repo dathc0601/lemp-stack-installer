@@ -17,15 +17,19 @@ readonly STATE_FILE="${STATE_DIR}/state"
 
 readonly WEB_ROOT_BASE="/var/www"
 # PHP_VERSION is NOT readonly — manage/php-version.sh switches the active
-# version post-install by writing php_active_version=X.Y to STATE_FILE, and
-# this block picks it up on every source of core.sh so render_template and
-# cache-*.sh see the current version, not the install-time default.
-PHP_VERSION="8.4"
-if [[ -f "${STATE_FILE}" ]]; then
+# version post-install by writing php_active_version=X.Y to STATE_FILE.
+# _core_reload_php_version picks that up on source AND must be re-called by
+# any parent shell after a subshell-scoped cmd_php_version, since subshells
+# can't mutate the parent's variables. The menu dispatcher does this for us.
+_core_reload_php_version() {
+    PHP_VERSION="8.4"
+    [[ -f "${STATE_FILE}" ]] || return 0
+    local _sv
     _sv=$(awk -F= '$1=="php_active_version"{print $2; exit}' "${STATE_FILE}" 2>/dev/null || true)
     [[ -n "$_sv" ]] && PHP_VERSION="$_sv"
-    unset _sv
-fi
+    return 0
+}
+_core_reload_php_version
 readonly NODE_MAJOR="22"
 readonly MARIADB_SERIES="11.4"
 
