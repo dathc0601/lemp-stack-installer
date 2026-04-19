@@ -314,6 +314,157 @@ _swap_summary() {
     fi
 }
 
+# =============================================================================
+#  PHP HELPERS (shared by cmd_php_config / cmd_php_pool / cmd_php_version)
+# =============================================================================
+
+# Resolve the currently active PHP version. $PHP_VERSION is already populated
+# from STATE_FILE by lib/core.sh, so this is a thin accessor — the explicit
+# helper keeps callers readable and gives us one point to extend later.
+_php_active_version() { echo "${PHP_VERSION}"; }
+
+# Return the systemd unit name for the active FPM (e.g. "php8.4-fpm").
+_php_fpm_service() { echo "php$(_php_active_version)-fpm"; }
+
+# Path to the active version's php.ini for a given SAPI (fpm|cli).
+_php_ini_file() { echo "/etc/php/$(_php_active_version)/$1/php.ini"; }
+
+# Path to the shared FPM pool config (www.conf).
+_php_pool_file() { echo "/etc/php/$(_php_active_version)/fpm/pool.d/www.conf"; }
+
+# Read a directive value from an ini file. Matches active (uncommented) form
+# only; tolerates leading whitespace and whitespace around the `=`. Emits the
+# raw value (no quotes stripped — ini values here are scalar).
+#   Usage: val=$(_php_ini_get "$file" "memory_limit")
+_php_ini_get() {
+    local file="$1" key="$2"
+    [[ -f "$file" ]] || return 0
+    grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" 2>/dev/null \
+        | tail -1 | awk -F= '{sub(/^[[:space:]]*/,"",$2); sub(/[[:space:]]*$/,"",$2); print $2}' \
+        || true
+}
+
+# Idempotent setter. Three cases:
+#   1) active line `key = ...`     → sed replace
+#   2) commented  `;key = ...`     → uncomment + set (same sed flavor as
+#                                    modules/40-php.sh:82 for max_input_vars)
+#   3) missing                     → append `key = value` at file end
+# Dots in the key are literal (escaped) so `opcache.enable` etc. work.
+_php_ini_set() {
+    local file="$1" key="$2" value="$3"
+    [[ -f "$file" ]] || err "ini file not found: ${file}"
+    local esc_key
+    esc_key=$(printf '%s' "$key" | sed 's/[.[\*^$/]/\\&/g')
+
+    if grep -qE "^[[:space:]]*${esc_key}[[:space:]]*=" "$file"; then
+        sed -i "s|^[[:space:]]*${esc_key}[[:space:]]*=.*|${key} = ${value}|" "$file"
+    elif grep -qE "^[[:space:]]*;[[:space:]]*${esc_key}[[:space:]]*=" "$file"; then
+        sed -i "s|^[[:space:]]*;[[:space:]]*${esc_key}[[:space:]]*=.*|${key} = ${value}|" "$file"
+    else
+        echo "${key} = ${value}" >> "$file"
+    fi
+}
+
+# Pool directive get/set — thin wrappers around _php_ini_get/_php_ini_set
+# that always target the active version's www.conf.
+_php_pool_get() { _php_ini_get "$(_php_pool_file)" "$1"; }
+_php_pool_set() { _php_ini_set "$(_php_pool_file)" "$1" "$2"; }
+
+# Atomic key=value writer for STATE_FILE. Same mktemp+mv pattern as
+# _swap_fstab_remove. If the file doesn't exist, creates it with mode 600.
+_php_state_set() {
+    local key="$1" value="$2"
+    [[ -n "$key" ]] || err "_php_state_set: empty key"
+    if [[ ! -f "$STATE_FILE" ]]; then
+        mkdir -p "$STATE_DIR"
+        : > "$STATE_FILE"
+        chmod 600 "$STATE_FILE"
+    fi
+    local tmp
+    tmp=$(mktemp)
+    awk -v k="$key" -v v="$value" '
+        BEGIN { written=0 }
+        {
+            if ($0 ~ "^" k "=") { print k "=" v; written=1; next }
+            print
+        }
+        END { if (!written) print k "=" v }
+    ' "$STATE_FILE" > "$tmp"
+    chmod --reference="$STATE_FILE" "$tmp" 2>/dev/null || chmod 600 "$tmp"
+    mv "$tmp" "$STATE_FILE"
+}
+
+# List PHP minor versions with a config dir under /etc/php, sorted. One per
+# line (e.g. "8.3\n8.4"). Empty output if none installed.
+_php_installed_versions() {
+    ls -1 /etc/php/ 2>/dev/null | grep -E '^[0-9]+\.[0-9]+$' | sort -V || true
+}
+
+# Emit the 3-line status header used above the PHP sub-menu options. Every
+# read is soft-failed so an unreadable php.ini or down FPM degrades to
+# "unknown"/"(unreadable)" rather than err-exit. Same pattern as
+# _menu_swap_status / _menu_databases_status.
+_php_summary() {
+    local active other_list other fpm_state
+    active=$(_php_active_version)
+
+    # Installed versions line — mark active, list others
+    other_list=""
+    while IFS= read -r v; do
+        [[ -z "$v" || "$v" == "$active" ]] && continue
+        other_list+="${v}, "
+    done < <(_php_installed_versions)
+    other="${other_list%, }"
+
+    # Active PHP release (from CLI — cheaper than FPM status)
+    local active_release
+    active_release=$(php -r 'echo PHP_VERSION;' 2>/dev/null || echo "")
+    if [[ -z "$active_release" ]]; then
+        active_release=$(php"${active}" -r 'echo PHP_VERSION;' 2>/dev/null || echo "unknown")
+    fi
+
+    # FPM service state
+    if systemctl is-active --quiet "$(_php_fpm_service)" 2>/dev/null; then
+        fpm_state="active"
+    else
+        fpm_state="inactive"
+    fi
+
+    if [[ -n "$other" ]]; then
+        echo "  PHP: ${active_release} (active), ${other} (installed) — $(_php_fpm_service): ${fpm_state}"
+    else
+        echo "  PHP: ${active_release} (active) — $(_php_fpm_service): ${fpm_state}"
+    fi
+
+    # php.ini snapshot
+    local ini mem up_ exec_ tz
+    ini=$(_php_ini_file fpm)
+    if [[ -f "$ini" ]]; then
+        mem=$(_php_ini_get "$ini" memory_limit)
+        up_=$(_php_ini_get "$ini" upload_max_filesize)
+        exec_=$(_php_ini_get "$ini" max_execution_time)
+        tz=$(_php_ini_get "$ini" date.timezone)
+        echo "  php.ini: memory_limit=${mem:-?}, upload=${up_:-?}, exec=${exec_:-?}, tz=${tz:-?}"
+    else
+        echo "  php.ini: (unreadable)"
+    fi
+
+    # Pool snapshot
+    local pool_file mode mc start mn mx
+    pool_file=$(_php_pool_file)
+    if [[ -f "$pool_file" ]]; then
+        mode=$(_php_ini_get "$pool_file" pm)
+        mc=$(_php_ini_get "$pool_file" pm.max_children)
+        start=$(_php_ini_get "$pool_file" pm.start_servers)
+        mn=$(_php_ini_get "$pool_file" pm.min_spare_servers)
+        mx=$(_php_ini_get "$pool_file" pm.max_spare_servers)
+        echo "  Pool www.conf: pm=${mode:-?}, max_children=${mc:-?}, start=${start:-?}, spare=${mn:-?}-${mx:-?}"
+    else
+        echo "  Pool www.conf: (unreadable)"
+    fi
+    echo ""
+}
+
 # Print usage and available commands.
 _usage() {
     echo ""
@@ -372,6 +523,11 @@ _usage() {
     echo "    swap-view                       Show swap state + kernel tunables + memory"
     echo "    swap-add [size]                 Create /swapfile (size in MB, e.g. 2048 or 2G)"
     echo "    swap-remove                     Swapoff + delete /swapfile + clean fstab"
+    echo ""
+    echo "  PHP:"
+    echo "    php-config                      Edit common php.ini values (interactive)"
+    echo "    php-pool                        Tune shared FPM pool (pm mode, workers)"
+    echo "    php-version [version]           Switch active PHP version (e.g. 8.3)"
     echo ""
 }
 

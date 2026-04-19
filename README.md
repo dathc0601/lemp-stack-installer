@@ -71,11 +71,12 @@ Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
   5) Manage admin apps         (users, paths, auth retries)
   6) Manage cache              (Redis, Memcached, OPcache)
   7) Manage swap               (view, add, remove /swapfile)
-  8) Server status             (services, disk, memory, SSL)
+  8) Manage PHP                (php.ini, pool, version)
+  9) Server status             (services, disk, memory, SSL)
 
   0) Exit
 
-─// Enter your choice (0-8) [Ctrl+C=Exit]:
+─// Enter your choice (0-9) [Ctrl+C=Exit]:
 ```
 
 Picking **Manage sites** opens a sub-menu with all site/domain actions:
@@ -202,6 +203,24 @@ Picking **Manage swap** opens a sub-menu for managing the `/swapfile` backing st
   0) Back to main menu
 ```
 
+Picking **Manage PHP** opens a sub-menu for PHP runtime tuning and version management — php.ini directives, FPM pool sizing, and switching to a different PHP minor version without a full reinstall. A live status header shows the active version, FPM service state, the six most impactful php.ini values, and the shared pool configuration. `Change PHP version` installs the target version from `ppa:ondrej/php`, copies the user's current ini + pool tuning forward, rewrites every vhost's `fastcgi_pass` socket path, and reloads nginx — old packages are left installed so rollback is one more `php-version` call away. Per-domain pools and per-domain PHP versions are intentionally out of scope (the stack uses a single shared FPM pool).
+
+```
+───────────────────────────────────────────────────────────
+  » 8. Manage PHP
+───────────────────────────────────────────────────────────
+
+  PHP: 8.4.11 (active) — php8.4-fpm: active
+  php.ini: memory_limit=512M, upload=256M, exec=600, tz=UTC
+  Pool www.conf: pm=dynamic, max_children=20, start=4, spare=2-6
+
+  1) PHP.ini config            (memory, upload, post, exec-time, input-vars, timezone)
+  2) PHP pool config           (pm mode, worker counts — shared www pool)
+  3) Change PHP version        (install + switch active version, regenerate vhosts)
+
+  0) Back to main menu
+```
+
 The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the appropriate menu after each action.
 
 ### `lemp-manage` — CLI (for scripting / automation)
@@ -264,6 +283,12 @@ sudo lemp-manage swap-view                           # Show swapon + fstab + sys
 sudo lemp-manage swap-add                            # Create /swapfile (prompts for size)
 sudo lemp-manage swap-add 2G                         # Non-interactive: 2 GB swap file
 sudo lemp-manage swap-remove                         # swapoff + delete + clean fstab
+
+# PHP (runtime + version management — day-2 counterpart to modules/40-php.sh)
+sudo lemp-manage php-config                          # Edit memory_limit, upload, timezone, ... (interactive)
+sudo lemp-manage php-pool                            # Tune shared FPM pool (pm mode, max_children, ...)
+sudo lemp-manage php-version                         # Pick target version from a numbered list
+sudo lemp-manage php-version 8.3                     # Non-interactive: switch to 8.3 (installs if needed)
 ```
 
 ## Security
@@ -348,6 +373,9 @@ server-setup/
 │   ├── swap-view.sh
 │   ├── swap-add.sh
 │   ├── swap-remove.sh
+│   ├── php-config.sh
+│   ├── php-pool.sh
+│   ├── php-version.sh
 │   └── status.sh
 ├── templates/                 # Nginx/systemd/PHP configs with {{PLACEHOLDER}} markers
 └── tests/

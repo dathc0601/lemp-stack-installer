@@ -404,7 +404,8 @@ _menu_main_options() {
     echo "  5) Manage admin apps         (users, paths, auth retries)"
     echo "  6) Manage cache              (Redis, Memcached, OPcache)"
     echo "  7) Manage swap               (view, add, remove /swapfile)"
-    echo "  8) Server status             (services, disk, memory, SSL)"
+    echo "  8) Manage PHP                (php.ini, pool, version)"
+    echo "  9) Server status             (services, disk, memory, SSL)"
     echo ""
     echo "  0) Exit"
     echo ""
@@ -442,6 +443,10 @@ _menu_main_dispatch() {
             return 2
             ;;
         8)
+            show_php_menu
+            return 2
+            ;;
+        9)
             ( cmd_status ) || true
             ;;
         0|q|Q|exit|quit)
@@ -687,7 +692,7 @@ _menu_load_commands() {
 show_menu() {
     _menu_load_commands
     _menu_loop "" _menu_main_options _menu_main_dispatch \
-        "─// Enter your choice (0-8) [Ctrl+C=Exit]: "
+        "─// Enter your choice (0-9) [Ctrl+C=Exit]: "
     echo ""
     info "Goodbye."
 }
@@ -906,5 +911,44 @@ _menu_swap_dispatch() {
 # Swap sub-menu — invoked from _menu_main_dispatch.
 show_swap_menu() {
     _menu_loop "7. Manage swap" _menu_swap_options _menu_swap_dispatch \
+        "─// Enter your choice (0-3) [0=Back]: "
+}
+
+# =============================================================================
+#  PHP SUB-MENU
+# =============================================================================
+
+# Render a 3-line status header (active version + FPM state, php.ini snapshot,
+# pool snapshot). Soft-fails — an unreadable php.ini prints "(unreadable)"
+# rather than err-exit. Delegates to _php_summary in manage.sh.
+_menu_php_status() {
+    _php_summary 2>/dev/null || echo "  PHP: unknown"
+}
+
+_menu_php_options() {
+    _menu_php_status
+    echo "  1) PHP.ini config            (memory, upload, post, exec-time, input-vars, timezone)"
+    echo "  2) PHP pool config           (pm mode, worker counts — shared www pool)"
+    echo "  3) Change PHP version        (install + switch active version, regenerate vhosts)"
+    echo ""
+    echo "  0) Back to main menu"
+    echo ""
+}
+
+_menu_php_dispatch() {
+    case "$1" in
+        1) ( cmd_php_config )  || true ;;
+        2) ( cmd_php_pool )    || true ;;
+        3) ( cmd_php_version ) || true ;;
+        0|b|B|back) return 1 ;;
+        "") ;;
+        *) warn "Invalid choice: ${1}" ;;
+    esac
+    return 0
+}
+
+# PHP sub-menu — invoked from _menu_main_dispatch.
+show_php_menu() {
+    _menu_loop "8. Manage PHP" _menu_php_options _menu_php_dispatch \
         "─// Enter your choice (0-3) [0=Back]: "
 }
