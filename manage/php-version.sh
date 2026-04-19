@@ -172,7 +172,21 @@ cmd_php_version() {
     # --- Step 6: persist active version state -------------------------------
     _php_state_set php_active_version "$target"
 
-    # --- Step 7: stop old FPM (packages kept for rollback) ------------------
+    # --- Step 7: point /usr/bin/php (and related tools) at new version ------
+    # Without this, shell invocations of `php somescript.php` still run the
+    # old version — divergent from what FPM serves. ondrej/php packages
+    # register each binary with update-alternatives at install time, so
+    # --set is the right verb (no registration dance needed).
+    local alt tool
+    for tool in php phar phar.phar; do
+        alt="/usr/bin/${tool}${target}"
+        if [[ -e "$alt" ]]; then
+            update-alternatives --set "$tool" "$alt" 2>/dev/null \
+                || warn "update-alternatives --set ${tool} → ${alt} failed (continuing)."
+        fi
+    done
+
+    # --- Step 8: stop old FPM (packages kept for rollback) ------------------
     info "Stopping + disabling php${current}-fpm (packages preserved for rollback)..."
     systemctl stop "php${current}-fpm"    2>/dev/null || true
     systemctl disable "php${current}-fpm" 2>/dev/null || true

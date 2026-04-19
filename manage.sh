@@ -416,11 +416,14 @@ _php_summary() {
     done < <(_php_installed_versions)
     other="${other_list%, }"
 
-    # Active PHP release (from CLI — cheaper than FPM status)
+    # Active PHP release — prefer the version-specific binary (php8.1, php8.4…)
+    # so we report the active FPM's release even when /usr/bin/php is still
+    # pointing at an older update-alternatives default. Fall back to bare `php`
+    # only if the version-specific binary isn't installed for some reason.
     local active_release
-    active_release=$(php -r 'echo PHP_VERSION;' 2>/dev/null || echo "")
+    active_release=$(php"${active}" -r 'echo PHP_VERSION;' 2>/dev/null || true)
     if [[ -z "$active_release" ]]; then
-        active_release=$(php"${active}" -r 'echo PHP_VERSION;' 2>/dev/null || echo "unknown")
+        active_release=$(php -r 'echo PHP_VERSION;' 2>/dev/null || echo "unknown")
     fi
 
     # FPM service state
