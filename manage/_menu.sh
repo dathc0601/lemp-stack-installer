@@ -403,7 +403,8 @@ _menu_main_options() {
     echo "  4) Manage SSH/SFTP           (port, passwords, fail2ban)"
     echo "  5) Manage admin apps         (users, paths, auth retries)"
     echo "  6) Manage cache              (Redis, Memcached, OPcache)"
-    echo "  7) Server status             (services, disk, memory, SSL)"
+    echo "  7) Manage swap               (view, add, remove /swapfile)"
+    echo "  8) Server status             (services, disk, memory, SSL)"
     echo ""
     echo "  0) Exit"
     echo ""
@@ -437,6 +438,10 @@ _menu_main_dispatch() {
             return 2
             ;;
         7)
+            show_swap_menu
+            return 2
+            ;;
+        8)
             ( cmd_status ) || true
             ;;
         0|q|Q|exit|quit)
@@ -682,7 +687,7 @@ _menu_load_commands() {
 show_menu() {
     _menu_load_commands
     _menu_loop "" _menu_main_options _menu_main_dispatch \
-        "─// Enter your choice (0-7) [Ctrl+C=Exit]: "
+        "─// Enter your choice (0-8) [Ctrl+C=Exit]: "
     echo ""
     info "Goodbye."
 }
@@ -854,4 +859,52 @@ _menu_databases_dispatch() {
 show_databases_menu() {
     _menu_loop "2. Manage databases" _menu_databases_options _menu_databases_dispatch \
         "─// Enter your choice (0-7) [0=Back]: "
+}
+
+# =============================================================================
+#  SWAP SUB-MENU
+# =============================================================================
+
+# Render a 3-line status header above the swap menu options. Soft-fails on
+# every read so an unreadable /proc/swaps degrades to "unknown" rather than
+# killing the TUI. Same pattern as _menu_databases_status.
+_menu_swap_status() {
+    local summary swappiness cache_pressure mem_total mem_avail
+    summary=$(_swap_summary 2>/dev/null || echo "unknown")
+    swappiness=$(cat /proc/sys/vm/swappiness 2>/dev/null || echo "?")
+    cache_pressure=$(cat /proc/sys/vm/vfs_cache_pressure 2>/dev/null || echo "?")
+    mem_total=$(free -h | awk '/^Mem:/ {print $2}' 2>/dev/null || echo "?")
+    mem_avail=$(free -h | awk '/^Mem:/ {print $7}' 2>/dev/null || echo "?")
+    echo "  Swap: ${summary}"
+    echo "  Swappiness: ${swappiness}, vfs_cache_pressure: ${cache_pressure}"
+    echo "  Memory: ${mem_total} total, ${mem_avail} available"
+    echo ""
+}
+
+_menu_swap_options() {
+    _menu_swap_status
+    echo "  1) View swap                 (detailed swapon + fstab + sysctl)"
+    echo "  2) Add swap                  (create /swapfile, fstab entry, swappiness)"
+    echo "  3) Remove swap               (swapoff, delete /swapfile, clean fstab)"
+    echo ""
+    echo "  0) Back to main menu"
+    echo ""
+}
+
+_menu_swap_dispatch() {
+    case "$1" in
+        1) ( cmd_swap_view )   || true ;;
+        2) ( cmd_swap_add )    || true ;;
+        3) ( cmd_swap_remove ) || true ;;
+        0|b|B|back) return 1 ;;
+        "") ;;
+        *) warn "Invalid choice: ${1}" ;;
+    esac
+    return 0
+}
+
+# Swap sub-menu — invoked from _menu_main_dispatch.
+show_swap_menu() {
+    _menu_loop "7. Manage swap" _menu_swap_options _menu_swap_dispatch \
+        "─// Enter your choice (0-3) [0=Back]: "
 }

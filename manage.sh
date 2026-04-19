@@ -238,6 +238,82 @@ _prompt_password_or_generate() {
     done
 }
 
+# =============================================================================
+#  SWAP HELPERS (shared by cmd_swap_view / cmd_swap_add / cmd_swap_remove)
+# =============================================================================
+
+# Check whether /etc/fstab has a non-commented swap entry for $1.
+# The path must start the line (possibly after leading whitespace) — matches
+# the real fstab format where <device> is always column 1.
+_swap_fstab_has() {
+    local path="$1"
+    [[ -f /etc/fstab ]] || return 1
+    grep -qE "^[[:space:]]*${path}[[:space:]]+none[[:space:]]+swap[[:space:]]" /etc/fstab
+}
+
+# Strip any non-commented swap entry for $1 from /etc/fstab. Atomic rewrite
+# via mktemp + mv; mode mirrored from the original. Caller supplies a literal
+# path; we quote dots defensively in case someone adopts `/var/swap.1` later.
+_swap_fstab_remove() {
+    local path="$1"
+    [[ -f /etc/fstab ]] || return 0
+    local tmp
+    tmp=$(mktemp)
+    awk -v p="$path" '
+        function esc(s,   r) { r=s; gsub(/\./, "\\.", r); return r }
+        BEGIN {
+            pat = "^[[:space:]]*" esc(p) "[[:space:]]+none[[:space:]]+swap[[:space:]]"
+        }
+        $0 ~ pat { next }
+        { print }
+    ' /etc/fstab > "$tmp"
+    chmod --reference=/etc/fstab "$tmp" 2>/dev/null || chmod 644 "$tmp"
+    mv "$tmp" /etc/fstab
+}
+
+# Emit one-line swap summary for the TUI status header. Degrades gracefully
+# (never err-exits, never writes state). Reads `swapon --show` output.
+#   Examples:
+#     "none configured"
+#     "/swapfile (2.0G file, 167M used, prio -2) — active"
+#     "/swapfile (2.0G file, inactive)"
+#     "/swapfile (2.0G file) + 1 other — active"
+#     "2 swap(s) active (not /swapfile)"
+_swap_summary() {
+    local active_lines self_line other_count active_count
+    active_lines=$(swapon --show --noheadings 2>/dev/null || true)
+
+    if [[ -z "$active_lines" ]]; then
+        if [[ -e /swapfile ]]; then
+            local size
+            size=$(du -h /swapfile 2>/dev/null | awk '{print $1}' || echo "?")
+            echo "/swapfile (${size} file, inactive)"
+        else
+            echo "none configured"
+        fi
+        return 0
+    fi
+
+    # swapon --show --noheadings columns: NAME TYPE SIZE USED PRIO
+    self_line=$(echo "$active_lines"  | awk '$1=="/swapfile"' | head -1 || true)
+    other_count=$(echo "$active_lines" | awk '$1!="/swapfile"' | wc -l | tr -d ' ' || echo 0)
+
+    if [[ -n "$self_line" ]]; then
+        local size used prio
+        size=$(echo "$self_line" | awk '{print $3}')
+        used=$(echo "$self_line" | awk '{print $4}')
+        prio=$(echo "$self_line" | awk '{print $5}')
+        if [[ "$other_count" -gt 0 ]]; then
+            echo "/swapfile (${size} file) + ${other_count} other — active"
+        else
+            echo "/swapfile (${size} file, ${used} used, prio ${prio}) — active"
+        fi
+    else
+        active_count=$(echo "$active_lines" | wc -l | tr -d ' ' || echo 0)
+        echo "${active_count} swap(s) active (not /swapfile)"
+    fi
+}
+
 # Print usage and available commands.
 _usage() {
     echo ""
@@ -291,6 +367,11 @@ _usage() {
     echo "    db-remove [name]                Drop DB + its dedicated users + cred block"
     echo "    db-import <file> <name>         Load .sql/.sql.gz into existing DB"
     echo "    db-export [name]                Dump DB to /var/backups/databases/*.sql.gz"
+    echo ""
+    echo "  Swap:"
+    echo "    swap-view                       Show swap state + kernel tunables + memory"
+    echo "    swap-add [size]                 Create /swapfile (size in MB, e.g. 2048 or 2G)"
+    echo "    swap-remove                     Swapoff + delete /swapfile + clean fstab"
     echo ""
 }
 

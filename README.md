@@ -70,11 +70,12 @@ Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
   4) Manage SSH/SFTP           (port, passwords, fail2ban)
   5) Manage admin apps         (users, paths, auth retries)
   6) Manage cache              (Redis, Memcached, OPcache)
-  7) Server status             (services, disk, memory, SSL)
+  7) Manage swap               (view, add, remove /swapfile)
+  8) Server status             (services, disk, memory, SSL)
 
   0) Exit
 
-─// Enter your choice (0-7) [Ctrl+C=Exit]:
+─// Enter your choice (0-8) [Ctrl+C=Exit]:
 ```
 
 Picking **Manage sites** opens a sub-menu with all site/domain actions:
@@ -183,6 +184,24 @@ Picking **Manage cache** opens a sub-menu for the three cache layers the stack e
   0) Back to main menu
 ```
 
+Picking **Manage swap** opens a sub-menu for managing the `/swapfile` backing store — the same file the installer creates when RAM < 4 GB. Use this to add swap on a VPS that started without it, resize an existing swap (remove → add), or remove swap entirely. The sub-menu shows a live status header with current swap size/usage, swappiness, and available RAM. `Add swap` refuses to clobber an already-active file — it's resize-via-remove-first, which avoids partial states. `Remove swap` warns loudly when used swap exceeds available RAM (where `swapoff` is likely to OOM).
+
+```
+───────────────────────────────────────────────────────────
+  » 7. Manage swap
+───────────────────────────────────────────────────────────
+
+  Swap: /swapfile (2.0G file, 167M used, prio -2) — active
+  Swappiness: 10, vfs_cache_pressure: 100
+  Memory: 3.8G total, 2.1G available
+
+  1) View swap                 (detailed swapon + fstab + sysctl)
+  2) Add swap                  (create /swapfile, fstab entry, swappiness)
+  3) Remove swap               (swapoff, delete /swapfile, clean fstab)
+
+  0) Back to main menu
+```
+
 The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the appropriate menu after each action.
 
 ### `lemp-manage` — CLI (for scripting / automation)
@@ -239,6 +258,12 @@ sudo lemp-manage db-user-password staging_copy       # Rotate the DB user's pass
 sudo lemp-manage db-remove staging_copy              # Drop DB + dedicated users + credentials block
 sudo lemp-manage db-export staging_copy              # Dump to /var/backups/databases/*.sql.gz
 sudo lemp-manage db-import /path/to/dump.sql.gz staging_copy
+
+# Swap (manage /swapfile — day-2 counterpart to the install-time swap module)
+sudo lemp-manage swap-view                           # Show swapon + fstab + sysctl + free
+sudo lemp-manage swap-add                            # Create /swapfile (prompts for size)
+sudo lemp-manage swap-add 2G                         # Non-interactive: 2 GB swap file
+sudo lemp-manage swap-remove                         # swapoff + delete + clean fstab
 ```
 
 ## Security
@@ -320,6 +345,9 @@ server-setup/
 │   ├── db-remove.sh
 │   ├── db-import.sh
 │   ├── db-export.sh
+│   ├── swap-view.sh
+│   ├── swap-add.sh
+│   ├── swap-remove.sh
 │   └── status.sh
 ├── templates/                 # Nginx/systemd/PHP configs with {{PLACEHOLDER}} markers
 └── tests/
