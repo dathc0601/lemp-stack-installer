@@ -3,14 +3,13 @@
 #  LEMP Stack Manager — Day-2 operations
 #  Usage: lemp-manage <command> [args]
 #
-#  Commands:
+#  Commands grouped by category — see `lemp-manage` (no args) for the full list.
+#  Highlights:
 #   status          Show server status (services, disk, memory, SSL, modules)
-#   list-sites      List all configured domains
 #   add-domain      Add a new domain with vhost, web root, and database
-#   remove-domain   Remove a domain (optionally delete DB + files)
-#   backup          Backup web roots and databases
-#   restore         Restore from a backup
-#   wp-install      Install WordPress on a domain
+#   wp-install      Install WordPress on an existing domain
+#   laravel-install Install Laravel on an existing domain
+#   php-version     Switch active PHP version (installs from ondrej/php PPA)
 #
 #  Dispatches to manage/<command>.sh. Shares lib/ with install.sh.
 ###############################################################################
@@ -468,6 +467,76 @@ _php_summary() {
     echo ""
 }
 
+# =============================================================================
+#  WEB APPS HELPERS (shared by cmd_wp_install / cmd_laravel_install + menu)
+# =============================================================================
+
+# Classify what's currently installed at a domain's web root.
+# Output is one of: wordpress | laravel | empty | unknown | missing
+#   wordpress — wp-config.php present
+#   laravel   — artisan present (Laravel project's entry point script)
+#   empty     — only the stock index.html from add-domain.sh (safe to overwrite)
+#   unknown   — non-empty but no recognized framework marker
+#   missing   — web root directory doesn't exist
+_app_detect() {
+    local domain="$1"
+    local root="${WEB_ROOT_BASE}/${domain}"
+    [[ -d "$root" ]] || { echo "missing"; return 0; }
+    [[ -f "${root}/wp-config.php" ]] && { echo "wordpress"; return 0; }
+    [[ -f "${root}/artisan"       ]] && { echo "laravel";   return 0; }
+    local count
+    count=$(find "$root" -mindepth 1 -maxdepth 1 ! -name "index.html" 2>/dev/null | wc -l | tr -d ' ' || echo 0)
+    if [[ "${count:-0}" -eq 0 ]]; then echo "empty"; else echo "unknown"; fi
+}
+
+# Emit the 2-line status header used above the Apps sub-menu options. Walks
+# /etc/nginx/conf.d, calls _app_detect per domain, tallies WordPress/Laravel
+# counts. Soft-fails — every read falls back to a sane default so a missing
+# composer, unreadable conf.d, or down php-fpm degrades rather than err-exit.
+# Same pattern as _menu_swap_status / _menu_databases_status / _php_summary.
+_apps_summary() {
+    local wp=0 lv=0 total=0 conf name kind
+    if [[ -d "$NGINX_CONF_DIR" ]]; then
+        for conf in "${NGINX_CONF_DIR}"/*.conf; do
+            [[ -f "$conf" ]] || continue
+            name=$(basename "$conf" .conf)
+            [[ "$name" == "000-default" ]] && continue
+            total=$((total + 1))
+            kind=$(_app_detect "$name" 2>/dev/null || echo unknown)
+            case "$kind" in
+                wordpress) wp=$((wp + 1)) ;;
+                laravel)   lv=$((lv + 1)) ;;
+            esac
+        done
+    fi
+
+    if [[ "$total" -eq 0 ]]; then
+        echo "  Apps: (no domains added yet — add one via 'Manage sites')"
+    else
+        local apps=$((wp + lv))
+        echo "  Apps: ${wp} WordPress, ${lv} Laravel — ${apps} of ${total} domains"
+    fi
+
+    # Composer + active-PHP versions. Composer's `--version` line can include
+    # a warning prefix (missing ext, old PHP) — grep a version-shaped token
+    # instead of positional awk so we're robust to format drift.
+    local composer_v php_v active
+    if command_exists composer; then
+        composer_v=$(composer --version 2>/dev/null \
+            | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true)
+        composer_v="${composer_v:-unknown}"
+    else
+        composer_v="(not installed)"
+    fi
+    active=$(_php_active_version)
+    php_v=$(php"${active}" -r 'echo PHP_VERSION;' 2>/dev/null || true)
+    if [[ -z "$php_v" ]]; then
+        php_v=$(php -r 'echo PHP_VERSION;' 2>/dev/null || echo unknown)
+    fi
+    echo "  Composer: ${composer_v} — PHP: ${php_v}"
+    echo ""
+}
+
 # Print usage and available commands.
 _usage() {
     echo ""
@@ -482,7 +551,6 @@ _usage() {
     echo "    remove-domain <domain>       Remove a domain"
     echo "    backup [domain]              Backup web roots and databases"
     echo "    restore <path> <domain>      Restore from backup"
-    echo "    wp-install <domain>          Install WordPress"
     echo ""
     echo "  SSL:"
     echo "    ssl-list                     List SSL certificates + expiry"
@@ -532,48 +600,58 @@ _usage() {
     echo "    php-pool                        Tune shared FPM pool (pm mode, workers)"
     echo "    php-version [version]           Switch active PHP version (e.g. 8.3)"
     echo ""
+    echo "  Web apps:"
+    echo "    wp-install <domain>             Install WordPress on a domain"
+    echo "    laravel-install <domain>        Install Laravel on a domain"
+    echo ""
 }
 
 # =============================================================================
 #  DISPATCHER
 # =============================================================================
+# Only runs when this file is executed directly (via /usr/local/bin/lemp or
+# /usr/local/bin/lemp-manage symlinks). When sourced — e.g. by the test
+# harness to exercise helpers in isolation — the guard below is false and we
+# skip the root check + dispatch so callers can poke at the helper API.
 
-# Root check
-[[ $EUID -eq 0 ]] || err "lemp-manage must be run as root (use sudo)."
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Root check
+    [[ $EUID -eq 0 ]] || err "lemp-manage must be run as root (use sudo)."
 
-# No args → launch the interactive menu (`lemp` entry point).
-# With args → fall through to the dispatcher below.
-if [[ $# -eq 0 ]]; then
+    # No args → launch the interactive menu (`lemp` entry point).
+    # With args → fall through to the subcommand dispatcher.
+    if [[ $# -eq 0 ]]; then
+        # shellcheck source=/dev/null
+        source "${SCRIPT_DIR}/manage/_menu.sh"
+        show_menu
+        exit 0
+    fi
+
+    # Command argument
+    CMD="${1:-}"
+    if [[ -z "$CMD" ]]; then
+        _usage
+        exit 1
+    fi
+    shift
+
+    # Map command name to function name (hyphens → underscores)
+    CMD_FUNC="cmd_${CMD//-/_}"
+    CMD_FILE="${SCRIPT_DIR}/manage/${CMD}.sh"
+
+    if [[ ! -f "$CMD_FILE" ]]; then
+        warn "Unknown command: ${CMD}"
+        _usage
+        exit 1
+    fi
+
+    # Source the subcommand file and call its function
     # shellcheck source=/dev/null
-    source "${SCRIPT_DIR}/manage/_menu.sh"
-    show_menu
-    exit 0
+    source "$CMD_FILE"
+
+    if ! declare -f "$CMD_FUNC" &>/dev/null; then
+        err "Command file '${CMD}.sh' does not define '${CMD_FUNC}()'."
+    fi
+
+    "$CMD_FUNC" "$@"
 fi
-
-# Command argument
-CMD="${1:-}"
-if [[ -z "$CMD" ]]; then
-    _usage
-    exit 1
-fi
-shift
-
-# Map command name to function name (hyphens → underscores)
-CMD_FUNC="cmd_${CMD//-/_}"
-CMD_FILE="${SCRIPT_DIR}/manage/${CMD}.sh"
-
-if [[ ! -f "$CMD_FILE" ]]; then
-    warn "Unknown command: ${CMD}"
-    _usage
-    exit 1
-fi
-
-# Source the subcommand file and call its function
-# shellcheck source=/dev/null
-source "$CMD_FILE"
-
-if ! declare -f "$CMD_FUNC" &>/dev/null; then
-    err "Command file '${CMD}.sh' does not define '${CMD_FUNC}()'."
-fi
-
-"$CMD_FUNC" "$@"

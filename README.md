@@ -64,7 +64,7 @@ sudo lemp
 Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
 ───────────────────────────────────────────────────────────
 
-  1) Manage sites              (domains, backups, WordPress)
+  1) Manage sites              (domains, backups)
   2) Manage databases          (list, info, add, delete, import, export)
   3) Manage SSL                (issue, renew, remove certificates)
   4) Manage SSH/SFTP           (port, passwords, fail2ban)
@@ -72,11 +72,12 @@ Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
   6) Manage cache              (Redis, Memcached, OPcache)
   7) Manage swap               (view, add, remove /swapfile)
   8) Manage PHP                (php.ini, pool, version)
-  9) Server status             (services, disk, memory, SSL)
+  9) Manage web applications   (install WordPress, Laravel)
+ 10) Server status             (services, disk, memory, SSL)
 
   0) Exit
 
-─// Enter your choice (0-9) [Ctrl+C=Exit]:
+─// Enter your choice (0-10) [Ctrl+C=Exit]:
 ```
 
 Picking **Manage sites** opens a sub-menu with all site/domain actions:
@@ -91,7 +92,6 @@ Picking **Manage sites** opens a sub-menu with all site/domain actions:
   3) Remove domain
   4) Backup                    (all domains or one)
   5) Restore                   (from backup path)
-  6) Install WordPress         (on a domain)
 
   0) Back to main menu
 ```
@@ -221,6 +221,22 @@ Picking **Manage PHP** opens a sub-menu for PHP runtime tuning and version manag
   0) Back to main menu
 ```
 
+Picking **Manage web applications** opens a sub-menu for deploying content frameworks onto any existing domain — **WordPress** (CMS, ~40% of the web) or **Laravel** (PHP framework, artisan/eloquent stack). Both actions ask which domain to install onto via a numbered picker. The status header shows how many domains already have an app installed vs raw (nginx-only) and the active Composer/PHP versions. WordPress uses WP-CLI when present, falling back to a curl tarball + `wp-config.php` sed. Laravel runs `composer create-project laravel/laravel`, writes `.env` with the domain's DB credentials, generates `APP_KEY`, and rewrites the vhost's `root` directive to `<site_root>/public` (Laravel's document root) before reloading nginx. Composer is not pinned to a specific Laravel version — it auto-resolves the highest release compatible with the active PHP (Laravel 11 needs PHP 8.2+; 10 works on 8.1), so you can keep a legacy-PHP domain on Laravel 10 by switching PHP first via `Manage PHP → Change version`.
+
+```
+───────────────────────────────────────────────────────────
+  » 9. Manage web applications
+───────────────────────────────────────────────────────────
+
+  Apps: 2 WordPress, 1 Laravel — 3 of 5 domains
+  Composer: 2.7.9 — PHP: 8.4.11
+
+  1) Install WordPress         (on an existing domain)
+  2) Install Laravel           (on an existing domain)
+
+  0) Back to main menu
+```
+
 The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the appropriate menu after each action.
 
 ### `lemp-manage` — CLI (for scripting / automation)
@@ -236,7 +252,6 @@ sudo lemp-manage remove-domain example.com           # Remove a domain
 sudo lemp-manage backup                              # Backup all domains
 sudo lemp-manage backup example.com                  # Backup a single domain
 sudo lemp-manage restore /var/backups/server-setup/2025-01-15/example.com example.com
-sudo lemp-manage wp-install example.com              # Install WordPress on a domain
 
 # SSL (Let's Encrypt)
 sudo lemp-manage ssl-list                            # List certs + expiry for every domain
@@ -289,6 +304,10 @@ sudo lemp-manage php-config                          # Edit memory_limit, upload
 sudo lemp-manage php-pool                            # Tune shared FPM pool (pm mode, max_children, ...)
 sudo lemp-manage php-version                         # Pick target version from a numbered list
 sudo lemp-manage php-version 8.3                     # Non-interactive: switch to 8.3 (installs if needed)
+
+# Web apps (deploy a CMS or framework onto an existing domain)
+sudo lemp-manage wp-install example.com              # Install WordPress (WP-CLI preferred, curl fallback)
+sudo lemp-manage laravel-install example.com         # composer create-project laravel/laravel + .env + vhost rewrite
 ```
 
 ## Security
@@ -344,6 +363,7 @@ server-setup/
 │   ├── backup.sh
 │   ├── restore.sh
 │   ├── wp-install.sh
+│   ├── laravel-install.sh
 │   ├── ssl-list.sh
 │   ├── ssl-issue.sh
 │   ├── ssl-remove.sh

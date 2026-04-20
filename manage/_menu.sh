@@ -397,7 +397,7 @@ _menu_loop() {
 # =============================================================================
 
 _menu_main_options() {
-    echo "  1) Manage sites              (domains, backups, WordPress)"
+    echo "  1) Manage sites              (domains, backups)"
     echo "  2) Manage databases          (list, info, add, delete, import, export)"
     echo "  3) Manage SSL                (issue, renew, remove certificates)"
     echo "  4) Manage SSH/SFTP           (port, passwords, fail2ban)"
@@ -405,7 +405,8 @@ _menu_main_options() {
     echo "  6) Manage cache              (Redis, Memcached, OPcache)"
     echo "  7) Manage swap               (view, add, remove /swapfile)"
     echo "  8) Manage PHP                (php.ini, pool, version)"
-    echo "  9) Server status             (services, disk, memory, SSL)"
+    echo "  9) Manage web applications   (install WordPress, Laravel)"
+    echo " 10) Server status             (services, disk, memory, SSL)"
     echo ""
     echo "  0) Exit"
     echo ""
@@ -447,6 +448,10 @@ _menu_main_dispatch() {
             return 2
             ;;
         9)
+            show_apps_menu
+            return 2
+            ;;
+        10)
             ( cmd_status ) || true
             ;;
         0|q|Q|exit|quit)
@@ -472,7 +477,6 @@ _menu_sites_options() {
     echo "  3) Remove domain"
     echo "  4) Backup                    (all domains or one)"
     echo "  5) Restore                   (from backup path)"
-    echo "  6) Install WordPress         (on a domain)"
     echo ""
     echo "  0) Back to main menu"
     echo ""
@@ -508,12 +512,6 @@ _menu_sites_dispatch() {
             domain=$(_menu_prompt "Target domain: ") || return 0
             [[ -n "$domain" ]] || { warn "No domain entered."; return 0; }
             ( cmd_restore "$backup_path" "$domain" ) || true
-            ;;
-        6)
-            local domain
-            domain=$(_menu_prompt "Domain for WordPress install: ") || return 0
-            [[ -n "$domain" ]] || { warn "No domain entered."; return 0; }
-            ( cmd_wp_install "$domain" ) || true
             ;;
         0|b|B|back)
             return 1
@@ -692,7 +690,7 @@ _menu_load_commands() {
 show_menu() {
     _menu_load_commands
     _menu_loop "" _menu_main_options _menu_main_dispatch \
-        "─// Enter your choice (0-9) [Ctrl+C=Exit]: "
+        "─// Enter your choice (0-10) [Ctrl+C=Exit]: "
     echo ""
     info "Goodbye."
 }
@@ -701,7 +699,7 @@ show_menu() {
 # Does NOT call _menu_load_commands: show_menu already did it before we got here.
 show_sites_menu() {
     _menu_loop "1. Manage sites" _menu_sites_options _menu_sites_dispatch \
-        "─// Enter your choice (0-6) [0=Back]: "
+        "─// Enter your choice (0-5) [0=Back]: "
 }
 
 # SSL sub-menu — invoked from _menu_main_dispatch.
@@ -958,4 +956,51 @@ _menu_php_dispatch() {
 show_php_menu() {
     _menu_loop "8. Manage PHP" _menu_php_options _menu_php_dispatch \
         "─// Enter your choice (0-3) [0=Back]: "
+}
+
+# =============================================================================
+#  WEB APPLICATIONS SUB-MENU
+# =============================================================================
+
+# Render a 2-line status header (app counts across all configured domains,
+# composer/php versions). Delegates to _apps_summary in manage.sh; soft-fails
+# on any read error rather than err-exit (same pattern as _menu_php_status).
+_menu_apps_status() {
+    _apps_summary 2>/dev/null || echo "  Apps: unknown"
+}
+
+_menu_apps_options() {
+    _menu_apps_status
+    echo "  1) Install WordPress         (on an existing domain)"
+    echo "  2) Install Laravel           (on an existing domain)"
+    echo ""
+    echo "  0) Back to main menu"
+    echo ""
+}
+
+_menu_apps_dispatch() {
+    case "$1" in
+        1)
+            local domain
+            domain=$(_menu_pick_domain all) || return 0
+            [[ -n "$domain" ]] || return 0
+            ( cmd_wp_install "$domain" ) || true
+            ;;
+        2)
+            local domain
+            domain=$(_menu_pick_domain all) || return 0
+            [[ -n "$domain" ]] || return 0
+            ( cmd_laravel_install "$domain" ) || true
+            ;;
+        0|b|B|back) return 1 ;;
+        "") ;;
+        *) warn "Invalid choice: ${1}" ;;
+    esac
+    return 0
+}
+
+# Web apps sub-menu — invoked from _menu_main_dispatch.
+show_apps_menu() {
+    _menu_loop "9. Manage web applications" _menu_apps_options _menu_apps_dispatch \
+        "─// Enter your choice (0-2) [0=Back]: "
 }
