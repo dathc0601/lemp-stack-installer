@@ -9,6 +9,7 @@
 #   add-domain      Add a new domain with vhost, web root, and database
 #   wp-install      Install WordPress on an existing domain
 #   laravel-install Install Laravel on an existing domain
+#   laravel-update  composer update + clear Laravel caches + optional migrate
 #   php-version     Switch active PHP version (installs from ondrej/php PPA)
 #
 #  Dispatches to manage/<command>.sh. Shares lib/ with install.sh.
@@ -537,6 +538,46 @@ _apps_summary() {
     echo ""
 }
 
+# Laravel-only summary used above the Utilities sub-menu. Counts Laravel
+# installations across all configured vhosts (ignores WordPress/raw domains),
+# and reports composer + active PHP versions on a second line. Soft-fails —
+# every read falls back to a sane default so an unreadable conf.d or missing
+# composer degrades rather than err-exit (same contract as _apps_summary).
+_laravel_summary() {
+    local count=0 conf name
+    if [[ -d "$NGINX_CONF_DIR" ]]; then
+        for conf in "${NGINX_CONF_DIR}"/*.conf; do
+            [[ -f "$conf" ]] || continue
+            name=$(basename "$conf" .conf)
+            [[ "$name" == "000-default" ]] && continue
+            [[ "$(_app_detect "$name" 2>/dev/null)" == "laravel" ]] \
+                && count=$((count + 1))
+        done
+    fi
+
+    if [[ "$count" -eq 0 ]]; then
+        echo "  Laravel apps: 0 — install one via 'Manage web applications'"
+    else
+        echo "  Laravel apps: ${count}"
+    fi
+
+    local composer_v php_v active
+    if command_exists composer; then
+        composer_v=$(composer --version 2>/dev/null \
+            | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true)
+        composer_v="${composer_v:-unknown}"
+    else
+        composer_v="(not installed)"
+    fi
+    active=$(_php_active_version)
+    php_v=$(php"${active}" -r 'echo PHP_VERSION;' 2>/dev/null || true)
+    if [[ -z "$php_v" ]]; then
+        php_v=$(php -r 'echo PHP_VERSION;' 2>/dev/null || echo unknown)
+    fi
+    echo "  Composer: ${composer_v} — PHP: ${php_v}"
+    echo ""
+}
+
 # Print usage and available commands.
 _usage() {
     echo ""
@@ -603,6 +644,10 @@ _usage() {
     echo "  Web apps:"
     echo "    wp-install <domain>             Install WordPress on a domain"
     echo "    laravel-install <domain>        Install Laravel on a domain"
+    echo ""
+    echo "  Utilities:"
+    echo "    laravel-update <domain>         Update Laravel (composer update + clear caches + migrate)"
+    echo "    laravel-clear-cache <domain>    Clear Laravel cache, views, routes, config, sessions"
     echo ""
 }
 

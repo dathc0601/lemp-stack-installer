@@ -96,7 +96,7 @@ _menu_pause() {
 # via "$(_menu_pick_domain ssl-off)"). The list, prompts, and warnings all
 # go to stderr so they don't leak into the captured value.
 #   Usage: domain=$(_menu_pick_domain <filter>) || return 0
-#   Filters: all | ssl-on | ssl-off
+#   Filters: all | ssl-on | ssl-off | laravel
 _menu_pick_domain() {
     local filter="${1:-all}"
     local domains=() conf name has_ssl
@@ -109,6 +109,7 @@ _menu_pick_domain() {
         case "$filter" in
             ssl-on)  [[ $has_ssl -eq 1 ]] || continue ;;
             ssl-off) [[ $has_ssl -eq 0 ]] || continue ;;
+            laravel) [[ "$(_app_detect "$name" 2>/dev/null)" == "laravel" ]] || continue ;;
         esac
         domains+=("$name")
     done
@@ -117,6 +118,7 @@ _menu_pick_domain() {
         case "$filter" in
             ssl-on)  warn "No domains have SSL certificates." >&2 ;;
             ssl-off) warn "All configured domains already have SSL." >&2 ;;
+            laravel) warn "No Laravel apps found. Install one via 'Manage web applications' first." >&2 ;;
             *)       warn "No domains configured." >&2 ;;
         esac
         return 1
@@ -406,7 +408,8 @@ _menu_main_options() {
     echo "  7) Manage swap               (view, add, remove /swapfile)"
     echo "  8) Manage PHP                (php.ini, pool, version)"
     echo "  9) Manage web applications   (install WordPress, Laravel)"
-    echo " 10) Server status             (services, disk, memory, SSL)"
+    echo " 10) Manage utilities          (update / clear-cache for Laravel)"
+    echo " 11) Server status             (services, disk, memory, SSL)"
     echo ""
     echo "  0) Exit"
     echo ""
@@ -452,6 +455,10 @@ _menu_main_dispatch() {
             return 2
             ;;
         10)
+            show_utilities_menu
+            return 2
+            ;;
+        11)
             ( cmd_status ) || true
             ;;
         0|q|Q|exit|quit)
@@ -690,7 +697,7 @@ _menu_load_commands() {
 show_menu() {
     _menu_load_commands
     _menu_loop "" _menu_main_options _menu_main_dispatch \
-        "─// Enter your choice (0-10) [Ctrl+C=Exit]: "
+        "─// Enter your choice (0-11) [Ctrl+C=Exit]: "
     echo ""
     info "Goodbye."
 }
@@ -1002,5 +1009,52 @@ _menu_apps_dispatch() {
 # Web apps sub-menu — invoked from _menu_main_dispatch.
 show_apps_menu() {
     _menu_loop "9. Manage web applications" _menu_apps_options _menu_apps_dispatch \
+        "─// Enter your choice (0-2) [0=Back]: "
+}
+
+# =============================================================================
+#  UTILITIES SUB-MENU
+# =============================================================================
+
+# Render a 2-line status header (Laravel count + composer/php versions).
+# Delegates to _laravel_summary in manage.sh; soft-fails rather than err-exit
+# (same pattern as _menu_apps_status / _menu_php_status).
+_menu_utilities_status() {
+    _laravel_summary 2>/dev/null || echo "  Laravel apps: unknown"
+}
+
+_menu_utilities_options() {
+    _menu_utilities_status
+    echo "  1) Update Laravel            (composer update + clear caches + migrate)"
+    echo "  2) Clear Laravel caches      (cache, views, routes, config, sessions)"
+    echo ""
+    echo "  0) Back to main menu"
+    echo ""
+}
+
+_menu_utilities_dispatch() {
+    case "$1" in
+        1)
+            local domain
+            domain=$(_menu_pick_domain laravel) || return 0
+            [[ -n "$domain" ]] || return 0
+            ( cmd_laravel_update "$domain" ) || true
+            ;;
+        2)
+            local domain
+            domain=$(_menu_pick_domain laravel) || return 0
+            [[ -n "$domain" ]] || return 0
+            ( cmd_laravel_clear_cache "$domain" ) || true
+            ;;
+        0|b|B|back) return 1 ;;
+        "") ;;
+        *) warn "Invalid choice: ${1}" ;;
+    esac
+    return 0
+}
+
+# Utilities sub-menu — invoked from _menu_main_dispatch.
+show_utilities_menu() {
+    _menu_loop "10. Manage utilities" _menu_utilities_options _menu_utilities_dispatch \
         "─// Enter your choice (0-2) [0=Back]: "
 }

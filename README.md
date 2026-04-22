@@ -73,11 +73,12 @@ Status: OK | Disk: 2.7/25 GB | RAM: 139/821 MB | Swap: 120/1024 MB
   7) Manage swap               (view, add, remove /swapfile)
   8) Manage PHP                (php.ini, pool, version)
   9) Manage web applications   (install WordPress, Laravel)
- 10) Server status             (services, disk, memory, SSL)
+ 10) Manage utilities          (update / clear-cache for Laravel)
+ 11) Server status             (services, disk, memory, SSL)
 
   0) Exit
 
-─// Enter your choice (0-10) [Ctrl+C=Exit]:
+─// Enter your choice (0-11) [Ctrl+C=Exit]:
 ```
 
 Picking **Manage sites** opens a sub-menu with all site/domain actions:
@@ -237,6 +238,22 @@ Picking **Manage web applications** opens a sub-menu for deploying content frame
   0) Back to main menu
 ```
 
+Picking **Manage utilities** opens the day-2 counterpart to the Web apps menu — maintenance verbs for Laravel sites that are already installed. The status header counts Laravel apps across all configured vhosts (WordPress and raw domains are filtered out of the domain picker, so you only see what's actionable). `Update Laravel` runs `composer update` in the site root, re-chowns the tree to the nginx user (composer writes as root), flushes every compiled cache with `php artisan optimize:clear`, and offers to run `php artisan migrate --force` for any newly-introduced migrations. `Clear Laravel caches` is the same `optimize:clear` (cache, compiled views, route cache, config cache, compiled classes) plus a wipe of `storage/framework/sessions/` for the default file driver. Both commands refuse to run on non-Laravel domains — the app-type gate catches WordPress/raw roots cleanly and points you to the right command.
+
+```
+───────────────────────────────────────────────────────────
+  » 10. Manage utilities
+───────────────────────────────────────────────────────────
+
+  Laravel apps: 2
+  Composer: 2.7.9 — PHP: 8.4.11
+
+  1) Update Laravel            (composer update + clear caches + migrate)
+  2) Clear Laravel caches      (cache, views, routes, config, sessions)
+
+  0) Back to main menu
+```
+
 The menu prompts for any required arguments (domain name, backup path, etc.) and returns to the appropriate menu after each action.
 
 ### `lemp-manage` — CLI (for scripting / automation)
@@ -308,6 +325,10 @@ sudo lemp-manage php-version 8.3                     # Non-interactive: switch t
 # Web apps (deploy a CMS or framework onto an existing domain)
 sudo lemp-manage wp-install example.com              # Install WordPress (WP-CLI preferred, curl fallback)
 sudo lemp-manage laravel-install example.com         # composer create-project laravel/laravel + .env + vhost rewrite
+
+# Utilities (day-2 maintenance on installed Laravel apps)
+sudo lemp-manage laravel-update example.com          # composer update + re-chown + optimize:clear + optional migrate
+sudo lemp-manage laravel-clear-cache example.com     # php artisan optimize:clear + wipe file-driver sessions
 ```
 
 ## Security
@@ -364,6 +385,8 @@ server-setup/
 │   ├── restore.sh
 │   ├── wp-install.sh
 │   ├── laravel-install.sh
+│   ├── laravel-update.sh
+│   ├── laravel-clear-cache.sh
 │   ├── ssl-list.sh
 │   ├── ssl-issue.sh
 │   ├── ssl-remove.sh
