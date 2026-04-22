@@ -26,7 +26,7 @@ One-command LEMP stack installer for Ubuntu 22.04 and 24.04. Sets up a productio
 **On a fresh Ubuntu 22.04 or 24.04 server:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dathc0601/lemp-stack-installer/main/server-setup/bootstrap.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/dathc0601/lemp-stack-installer/bootstrap.sh | sudo bash
 ```
 
 The installer will prompt you for:
